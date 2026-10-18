@@ -1,0 +1,12 @@
+- [x] Brute-force lockout on key login
+- [x] Label the student learning project honestly without changing login or video behavior; login notice and route title verified in browser
+- [ ] Export updated source to smmdigitalfame-cmyk/finalproject (blocked until GitHub credentials are valid)
+- [x] /gen <name> <days|lifetime>, revoke = instant logout, expiry = auto logout
+- [x] Add profile-menu bulk estimator, all-video preview, saved rules and Push
+- [x] Verify estimator calculations and saved settings
+- [x] Harden bulk validation, bounded processing and persistence
+- [x] Add stable country variation within four percentage points and test all-video auto-apply
+- [x] Optimize thumbnail/video uploads and media loading while preserving working UI and access security
+- [ ] Restore media upload storage (blocked: workspace public-bucket policy denied creation; existing URL playback requires public media)
+- [x] Test upload recovery and bounded load handling; 21 tests pass, live upload remains blocked by storage policy
+- [ ] Verify menu → Push → reopen insights while signed in (blocked: no authorized Telegram access-key session available)
