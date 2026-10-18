@@ -16,7 +16,9 @@ Independent builds target Vercel. Apply SQL migrations in filename order, then `
 
 This project was built with [Lovable](https://lovable.dev).
 
-**Live app**: https://ttttttttttttttttttttttttttt.lovable.app
+**Independent live app**: https://finalproject-six-mu.vercel.app
+
+Zyla is the primary scraping service, with RapidAPI as backup. The optional third Apify fallback requires a direct `APIFY_API_KEY` in the hosting environment; no Lovable gateway credential is required. The existing Telegram bot now serves this independent deployment. Generate new keys using `/gen name 30` or `/gen name lifetime`; keys from the former backend are not automatically imported.
 
 ## Build with Lovable
 
