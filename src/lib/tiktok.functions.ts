@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { playableVideoUrl } from "@/lib/videoUrls";
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/apify";
+const APIFY_URL = "https://api.apify.com/v2";
 const ACTOR_ID = "clockworks~tiktok-scraper";
 const RAPID_HOST = "tiktok-scraper7.p.rapidapi.com";
 
@@ -209,17 +209,15 @@ const scrapeViaRapid = async (username: string, count: number) => {
 
 // ---------- Apify fallback — async run + poll (slow but reliable) ----------
 const scrapeViaApify = async (username: string, count: number) => {
-  const lov = process.env.LOVABLE_API_KEY;
   const key = process.env.APIFY_API_KEY;
-  if (!lov || !key) throw new Error("Scraping key is not configured");
+  if (!key) throw new Error("Scraping fallback key is not configured");
   const headers = {
-    Authorization: `Bearer ${lov}`,
-    "X-Connection-Api-Key": key,
+    Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
   };
 
   // Start an async Actor run — sync mode times out (502) when downloading many videos.
-  const startRes = await fetch(`${GATEWAY_URL}/acts/${ACTOR_ID}/runs`, {
+  const startRes = await fetch(`${APIFY_URL}/acts/${ACTOR_ID}/runs`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -231,7 +229,7 @@ const scrapeViaApify = async (username: string, count: number) => {
   });
   if (!startRes.ok) {
     const t = await startRes.text();
-    console.error(`Apify run start failed [${startRes.status}]: ${t}`);
+    console.error(`Apify run start failed [${startRes.status}]`);
     return {
       error: startRes.status === 429 ? "Rate limited, try again shortly." : "TikTok is temporarily unavailable. Please retry.",
       profile: emptyProfile(username),
@@ -249,7 +247,7 @@ const scrapeViaApify = async (username: string, count: number) => {
   let status = runData.status as string;
   for (let i = 0; i < 28 && !["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status); i++) {
     await sleep(3000);
-    const stRes = await fetch(`${GATEWAY_URL}/actor-runs/${runId}`, { headers });
+    const stRes = await fetch(`${APIFY_URL}/actor-runs/${runId}`, { headers });
     if (!stRes.ok) {
       if (stRes.status >= 400 && stRes.status < 500) break; // won't recover
       continue; // transient 5xx — keep polling
@@ -261,10 +259,10 @@ const scrapeViaApify = async (username: string, count: number) => {
   }
 
   // Read whatever the dataset has (full set if SUCCEEDED, partial if still running).
-  const itemsRes = await fetch(`${GATEWAY_URL}/datasets/${datasetId}/items?limit=${count}`, { headers });
+  const itemsRes = await fetch(`${APIFY_URL}/datasets/${datasetId}/items?limit=${count}`, { headers });
   if (!itemsRes.ok) {
     const t = await itemsRes.text();
-    console.error(`Apify dataset read failed [${itemsRes.status}]: ${t}`);
+    console.error(`Apify dataset read failed [${itemsRes.status}]`);
     return { error: "TikTok is temporarily unavailable. Please retry.", profile: emptyProfile(username), posts: [] };
   }
   const items: any[] = await itemsRes.json();

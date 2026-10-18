@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { createUploadQueue, isTransientUploadError } from "./uploadControl";
+import { authorizeMediaUpload } from "./mediaUpload.functions";
 
 const runUpload = createUploadQueue(2);
 const pendingUploads = new WeakMap<File, Promise<CloudinaryUploadResult>>();
@@ -159,16 +160,21 @@ const uploadFile = async (file: File, onProgress?: (percent: number) => void): P
 
   if (onProgress) onProgress(10);
 
+  let savedKey: unknown;
+  try { savedKey = JSON.parse(localStorage.getItem("access_key") || "null"); } catch { /* invalid session */ }
+  const key = savedKey && typeof savedKey === "object" && "key_id" in savedKey && typeof savedKey.key_id === "string" ? savedKey.key_id : "";
+  if (!key) throw new Error("Sign in with your project access key before uploading.");
+  const signed = await authorizeMediaUpload({ data: { key, path: fileName } });
   let result = await supabase.storage
     .from("media")
-    .upload(fileName, uploadBlob, {
+    .uploadToSignedUrl(signed.path, signed.token, uploadBlob, {
       contentType: uploadContentType,
       upsert: false,
     });
 
   for (let attempt = 0; result.error && isTransientUploadError(result.error) && attempt < 2; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** attempt + Math.random() * 250));
-    result = await supabase.storage.from("media").upload(fileName, uploadBlob, { contentType: uploadContentType, upsert: false });
+    result = await supabase.storage.from("media").uploadToSignedUrl(signed.path, signed.token, uploadBlob, { contentType: uploadContentType, upsert: false });
   }
   if (result.error || !result.data) {
     const message = result.error?.message ?? "No file was returned";

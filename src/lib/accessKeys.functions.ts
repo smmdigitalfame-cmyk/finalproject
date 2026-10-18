@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader, getRequestIP } from "@tanstack/react-start/server";
 import { z } from "zod";
+import { resolveClientIp } from "./requestIdentity";
 
 const MAX_FAILS = 5;
 const WINDOW_MS = 15 * 60_000;
@@ -10,8 +11,12 @@ export const checkAccessKey = createServerFn({ method: "POST" })
   .inputValidator((data) => z.object({ key: z.string().trim().min(1).max(64), login: z.boolean().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Use the edge-provided client IP; X-Forwarded-For is client-spoofable
-    const ip = getRequestHeader("cf-connecting-ip") || getRequestIP() || "unknown";
+    const identityHeaders = new Headers();
+    for (const name of ["cf-connecting-ip", "x-vercel-forwarded-for", "x-real-ip"]) {
+      const value = getRequestHeader(name);
+      if (value) identityHeaders.set(name, value);
+    }
+    const ip = resolveClientIp(identityHeaders, getRequestIP(), process.env["VERCEL"] === "1");
     const since = new Date(Date.now() - WINDOW_MS).toISOString();
 
     const { count } = await supabaseAdmin

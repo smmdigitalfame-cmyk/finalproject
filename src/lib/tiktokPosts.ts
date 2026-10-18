@@ -1,4 +1,5 @@
 import type { ReelData } from "./mockData";
+import { scrapeTikTok } from "./tiktok.functions";
 
 export interface TikTokApiPost {
   id: string;
@@ -84,24 +85,8 @@ export const fetchTikTokPosts = async (
   username: string,
   count = 30
 ): Promise<ReelData[]> => {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tiktok-user-posts?username=${encodeURIComponent(
-    username.replace(/^@/, "")
-  )}&count=${count}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    },
-  });
-  if (!res.ok) {
-    let msg = "Failed to fetch posts";
-    try {
-      const j = await res.json();
-      msg = j?.error || msg;
-    } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-  const json = await res.json();
-  const posts: TikTokApiPost[] = json?.posts || [];
+  const result = await scrapeTikTok({ data: { username, count } });
+  if (result.error) throw new Error(result.error);
+  const posts: TikTokApiPost[] = result.posts || [];
   return posts.map((p) => apiPostToReel(p, username));
 };

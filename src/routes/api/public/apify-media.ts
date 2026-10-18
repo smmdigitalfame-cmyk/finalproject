@@ -12,19 +12,17 @@ export const Route = createFileRoute("/api/public/apify-media")({
         if (!isApifyMediaUrl(source)) return new Response("Invalid video URL", { status: 400 });
 
         const apiKey = process.env.APIFY_API_KEY;
-        const lovableKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey || !lovableKey) return new Response("Video service is not configured", { status: 503 });
+        if (!apiKey) return new Response("Video service is not configured", { status: 503 });
 
         const upstreamUrl = new URL(source);
-        const gatewayUrl = `https://connector-gateway.lovable.dev/apify${upstreamUrl.pathname.replace(/^\/v2/, "")}${upstreamUrl.search}`;
+        upstreamUrl.searchParams.delete("token");
         const headers = new Headers({
-          Authorization: `Bearer ${lovableKey}`,
-          "X-Connection-Api-Key": apiKey,
+          Authorization: `Bearer ${apiKey}`,
         });
         const range = request.headers.get("range");
         if (range) headers.set("Range", range);
 
-        const upstream = await fetch(gatewayUrl, { headers });
+        const upstream = await fetch(upstreamUrl, { headers, redirect: "error" });
         if (!upstream.ok || !upstream.body) {
           return new Response("Video could not be loaded", { status: upstream.status || 502 });
         }

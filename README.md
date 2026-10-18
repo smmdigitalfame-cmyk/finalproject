@@ -12,7 +12,7 @@ An independent student project for learning short-video interfaces, media handli
 
 ## Independent hosting
 
-The current deployment targets Lovable's Cloudflare runtime. Exporting code does not migrate database records, media storage, private credentials or provider connections, and does not make this version Vercel-ready. Independent hosting requires a compatible deployment target, your own backend configuration and securely configured server credentials. Never commit `.env` files, access tokens or private keys.
+Independent builds target Vercel. Apply SQL migrations in filename order, then `deploy/independent-database.sql`, to your own backend. Configure a public `media` bucket without anonymous write policies. Set build-time `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_PROJECT_ID`. Set server-only `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ZYLA_API_KEY`, and `RAPIDAPI_KEY`. Uploads use active project keys and signed direct-to-storage transfers. Configure Telegram's webhook with its secret header after deployment. Code export does not migrate records, media or credentials. Never commit `.env` files, access tokens or private keys.
 
 This project was built with [Lovable](https://lovable.dev).
 
