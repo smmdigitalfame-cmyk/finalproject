@@ -73,10 +73,8 @@ const KeyLogin = () => {
 
         {/* Title */}
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Student Reels Lab</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Reels Lab</h1>
           <p className="text-muted-foreground/70 text-sm">Enter your project access key to continue</p>
-          <p className="mt-4 text-sm text-muted-foreground">Independent student learning project. Not affiliated with TikTok. No fees charged.</p>
-          <p className="mt-2 text-sm text-muted-foreground">Do not enter a TikTok password or verification code. Edited and estimated insights are not official TikTok analytics.</p>
         </div>
 
         {/* Login form */}

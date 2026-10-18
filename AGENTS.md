@@ -31,4 +31,4 @@ All media upload surfaces share a bounded upload queue and retry only transient 
 Independent builds target Vercel while managed previews retain their runtime; provider-specific trusted IP headers preserve per-client key throttling.
 Scraper fallback and media proxy call Apify directly using a server-only provider key, so independent hosting does not depend on the Lovable connector gateway.
 Media uploads require server-validated active project keys and scoped signed upload URLs, then transfer directly to storage to avoid public writes and hosting payload limits.
-Keep educational identity and analytics disclosure visible in the shared root shell and project-key entry screen, with matching route metadata and install manifest, so all entry points distinguish the demo from an official platform.
+Keep the educational identity, non-affiliation and estimated-analytics disclosure in README.md only; the running app shows no student/demo labeling in its shell, login screen, route metadata or install manifest.

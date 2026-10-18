@@ -81,15 +81,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Student Reels Lab — Independent Learning Project" },
+      { title: "Reels Lab" },
       {
         name: "description",
-        content: "Independent student learning project for short-video interfaces and estimated analytics. Not affiliated with TikTok. No fees charged.",
+        content: "Reels Lab is a workspace for cloning public short-video feeds, editing reel details, and exploring watch-time and audience insights.",
       },
-      { property: "og:title", content: "Student Reels Lab — Independent Learning Project" },
+      { property: "og:title", content: "Reels Lab" },
       {
         property: "og:description",
-        content: "Independent educational demo. Edited and estimated insights are not official TikTok analytics.",
+        content: "Clone public short-video feeds, edit reel details, and explore watch-time, retention and audience insights.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -136,9 +136,6 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <aside aria-label="Educational project notice" className="border-b border-border bg-background px-4 py-2 text-center text-xs text-muted-foreground">
-        Student Reels Lab · Independent learning project · Not affiliated with TikTok · No fees · Edited/estimated insights, not official analytics
-      </aside>
       <Outlet />
       <Toaster />
       <Sonner />

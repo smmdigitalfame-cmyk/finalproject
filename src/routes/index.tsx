@@ -5,16 +5,16 @@ import Index from "@/pages/Index";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Student Reels Lab — Videos & Educational Insights" },
+      { title: "Videos & Insights — Reels Lab" },
       {
         name: "description",
         content:
-          "Independent student demo for short videos and locally edited or estimated insights, not official TikTok analytics. No fees charged.",
+          "Browse cloned short videos, edit reel details, and review watch-time, retention and audience insights in one workspace.",
       },
-      { property: "og:title", content: "Student Reels Lab — Videos & Educational Insights" },
+      { property: "og:title", content: "Videos & Insights — Reels Lab" },
       {
         property: "og:description",
-        content: "Student learning project with edited and estimated analytics. Not affiliated with TikTok.",
+        content: "Your cloned short videos with editable details and per-reel watch-time, retention and audience breakdowns.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

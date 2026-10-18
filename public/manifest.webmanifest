@@ -1,7 +1,7 @@
 {
-  "name": "Student Reels Lab",
+  "name": "Reels Lab",
   "short_name": "Reels Lab",
-  "description": "Independent student learning project. Not affiliated with TikTok. No fees charged.",
+  "description": "Clone public short-video feeds, edit reel details, and explore watch-time, retention and audience insights.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -5,12 +5,12 @@ import TelegramTest from "@/pages/TelegramTest";
 export const Route = createFileRoute("/admin/telegram-test")({
   head: () => ({
     meta: [
-      { title: "Telegram Notifications — Student Reels Lab" },
-      { name: "description", content: "Test project administrator notifications for Student Reels Lab." },
-      { property: "og:title", content: "Telegram Notifications — Student Reels Lab" },
+      { title: "Telegram Notifications — Reels Lab" },
+      { name: "description", content: "Check administrator notifications for Reels Lab access keys and logins." },
+      { property: "og:title", content: "Telegram Notifications — Reels Lab" },
       {
         property: "og:description",
-        content: "Administrator notification checks for the independent student learning project.",
+        content: "Verify that key creation, revocation and login alerts reach project administrators.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

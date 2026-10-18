@@ -1,4 +1,4 @@
-# Student Reels Lab
+# Reels Lab
 
 An independent student project for learning short-video interfaces, media handling and analytics visualization. Not affiliated with, endorsed by, or operated by TikTok or ByteDance. No fees are charged for this learning project.
 
