@@ -72,7 +72,18 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
               }} /></label>)}
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Average watch time and watched full video are set automatically from each video's views.</p>
+        </section>
+        <section className="space-y-4 border-b border-border py-5">
+          <h3 className="font-semibold">Average watch time</h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-average-auto" className="text-sm">Auto</label><Switch id="bulk-average-auto" checked={draft.averageWatchSeconds === undefined} onCheckedChange={auto => update({ averageWatchSeconds: auto ? undefined : 12 })} /></div>
+            {draft.averageWatchSeconds !== undefined && <label className="flex items-center justify-between gap-3 text-sm">Average watch time per video<div className="flex items-center gap-2"><Input aria-label="Average watch time seconds" className="w-24 text-right" type="number" min={0} step={0.1} value={draft.averageWatchSeconds} onChange={event => update({ averageWatchSeconds: Number(event.target.value) })} /><span className="text-sm text-muted-foreground">s</span></div></label>}
+          </div>
+        </section>
+        <section className="space-y-4 border-b border-border py-5">
+          <h3 className="font-semibold">Watched full video</h3>
+          <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-full-auto" className="text-sm">Auto</label><Switch id="bulk-full-auto" checked={draft.watchedFullOverridePercent === undefined} onCheckedChange={auto => update({ watchedFullOverridePercent: auto ? undefined : draft.watchedFullPercent })} /></div>
+          {draft.watchedFullOverridePercent !== undefined && <PercentControl label="Watched full video percentage" value={draft.watchedFullOverridePercent} onChange={value => update({ watchedFullOverridePercent: value })} />}
         </section>
         <section className="space-y-4 border-b border-border py-5">
           <div className="flex justify-between gap-3"><h3 className="font-semibold">Traffic sources</h3><span className={`text-sm ${Math.abs(trafficTotal - 100) < 0.01 ? "text-tiktok-success" : "text-destructive"}`}>{Number(trafficTotal.toFixed(2))} / 100%</span></div>

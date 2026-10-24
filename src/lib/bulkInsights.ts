@@ -5,7 +5,9 @@ export interface BulkInsightSettings {
   enabled: boolean;
   secondsPer1000Views: number;
   averageWatchPercent: number;
+  averageWatchSeconds?: number;
   watchedFullPercent: number;
+  watchedFullOverridePercent?: number;
   trafficSources: ReelInsights["trafficSources"];
   audienceRegions: ReelInsights["audienceRegions"];
   countryVariation?: number;
@@ -28,6 +30,8 @@ export function validateBulkSettings(input: unknown): string | null {
   const settings = input as BulkInsightSettings;
   if (typeof settings.enabled !== "boolean") return "Invalid auto-apply setting.";
   if (!Number.isSafeInteger(settings.secondsPer1000Views) || settings.secondsPer1000Views < 0) return "Enter a valid total play time.";
+  if (settings.averageWatchSeconds !== undefined && (!Number.isFinite(settings.averageWatchSeconds) || settings.averageWatchSeconds < 0)) return "Enter a valid average watch time in seconds.";
+  if (settings.watchedFullOverridePercent !== undefined && !validPercent(settings.watchedFullOverridePercent)) return "Watched full video must be between 0 and 100%.";
   if ((settings.averageWatchPercent !== undefined && !validPercent(settings.averageWatchPercent)) || (settings.watchedFullPercent !== undefined && !validPercent(settings.watchedFullPercent))) return "Watch percentages must be between 0 and 100.";
   if (settings.countryVariation !== undefined && (!Number.isFinite(settings.countryVariation) || settings.countryVariation < 0 || settings.countryVariation > 4)) return "Country variation must be between 0 and 4 percentage points.";
   if (!settings.trafficSources || typeof settings.trafficSources !== "object") return "Invalid traffic sources.";
@@ -81,15 +85,24 @@ function seededFraction(reel: ReelData, key: string): number {
 
 function defaultAvgWatchSeconds(reel: ReelData, duration: number): number {
   const bucket = viewsBucket(reel.insights.views);
-  const low = AVG_WATCH_LOW[bucket]!, high = AVG_WATCH_HIGH[bucket]!;
+  const low = AVG_WATCH_LOW[bucket] ?? 5.5, high = AVG_WATCH_HIGH[bucket] ?? 6;
   const value = low + seededFraction(reel, "avg") * (high - low);
   return Math.min(duration, Math.round(value * 10) / 10);
 }
 
 function defaultWatchedFullPercent(reel: ReelData): number {
   const bucket = viewsBucket(reel.insights.views);
-  const low = FULL_LOW[bucket]!, high = FULL_HIGH[bucket]!;
+  const low = FULL_LOW[bucket] ?? 7.5, high = FULL_HIGH[bucket] ?? 8;
   return Number((low + seededFraction(reel, "full") * (high - low)).toFixed(2));
+}
+
+function customAvgWatchSeconds(reel: ReelData, duration: number, base: number): number {
+  if (base === 0 || duration <= 0) return 0;
+  const low = Math.max(0, base - 3);
+  const high = Math.min(duration, base + 3);
+  if (low >= high) return Math.min(duration, base);
+  const value = low + seededFraction(reel, "custom-avg") * (high - low);
+  return Math.min(high, Math.max(low, Math.round(value * 10) / 10));
 }
 
 function applyToReel(reel: ReelData, settings: BulkInsightSettings): ReelData {
@@ -102,8 +115,8 @@ function applyToReel(reel: ReelData, settings: BulkInsightSettings): ReelData {
     insights: {
       ...reel.insights,
       totalPlayTime,
-      avgWatchTime: defaultAvgWatchSeconds(reel, duration),
-      watchedFull: defaultWatchedFullPercent(reel),
+      avgWatchTime: settings.averageWatchSeconds === undefined ? defaultAvgWatchSeconds(reel, duration) : customAvgWatchSeconds(reel, duration, settings.averageWatchSeconds),
+      watchedFull: settings.watchedFullOverridePercent ?? defaultWatchedFullPercent(reel),
       trafficSources: { ...settings.trafficSources },
       audienceRegions: countryEstimates(reel, settings),
     },
