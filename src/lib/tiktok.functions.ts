@@ -18,6 +18,7 @@ const emptyProfile = (username: string) => ({
   bioLink: "",
   region: "",
   avatar: "",
+  hasStory: false,
 });
 
 const formatDuration = (s: number) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, "0")}`;
@@ -80,8 +81,8 @@ const scrapeViaZyla = async (username: string, count: number) => {
   const headers = { Authorization: `Bearer ${key}` };
 
   const [infoRes, postsRes] = await Promise.all([
-    fetch(`${ZYLA_BASE}/18616/user+details?username=${encodeURIComponent(username)}`, { headers }),
-    fetch(`${ZYLA_BASE}/18615/user+videos?username=${encodeURIComponent(username)}`, { headers }),
+    fetch(`${ZYLA_BASE}/18616/user+details?username=${encodeURIComponent(username)}`, { headers, signal: AbortSignal.timeout(20000) }),
+    fetch(`${ZYLA_BASE}/18615/user+videos?username=${encodeURIComponent(username)}`, { headers, signal: AbortSignal.timeout(25000) }),
   ]);
   if (!infoRes.ok) throw new Error(`info-${infoRes.status}`);
   const user = await infoRes.json();
@@ -113,7 +114,8 @@ const scrapeViaZyla = async (username: string, count: number) => {
     verified: !!user.verified,
     bioLink: user.bio_link || "",
     region: user.region || "",
-    avatar: user.profile_image || "",
+    avatar: playableVideoUrl(user.profile_image || ""),
+    hasStory: Number(user.UserStoryStatus ?? user.user_story_status ?? 0) > 0 || !!user.has_story,
   };
   const posts = valid.map((v) => ({
     id: String(v.video_id),
@@ -146,7 +148,7 @@ const scrapeViaRapid = async (username: string, count: number) => {
 
   const infoRes = await fetch(
     `https://${RAPID_HOST}/user/info?unique_id=${encodeURIComponent(username)}`,
-    { headers },
+    { headers, signal: AbortSignal.timeout(15000) },
   );
   if (!infoRes.ok) throw new Error(`info-${infoRes.status}`);
   const info = await infoRes.json();
@@ -157,7 +159,7 @@ const scrapeViaRapid = async (username: string, count: number) => {
 
   const postsRes = await fetch(
     `https://${RAPID_HOST}/user/posts?unique_id=${encodeURIComponent(username)}&count=${count}&cursor=0`,
-    { headers },
+    { headers, signal: AbortSignal.timeout(20000) },
   );
   if (!postsRes.ok) throw new Error(`posts-${postsRes.status}`);
   const postsData = await postsRes.json();
@@ -182,7 +184,8 @@ const scrapeViaRapid = async (username: string, count: number) => {
     verified: !!user.verified,
     bioLink: user.bioLink || "",
     region: user.region || "",
-    avatar: user.avatarLarger || user.avatarMedium || user.avatarThumb || "",
+    avatar: playableVideoUrl(user.avatarLarger || user.avatarMedium || user.avatarThumb || ""),
+    hasStory: Number(user.UserStoryStatus ?? 0) > 0,
   };
   const posts = valid.map((v) => ({
     id: String(v.aweme_id),
@@ -280,7 +283,8 @@ const scrapeViaApify = async (username: string, count: number) => {
     verified: !!a.verified,
     bioLink: a.bioLink || "",
     region: a.region || "",
-    avatar: a.avatar || "",
+    avatar: playableVideoUrl(a.avatar || ""),
+    hasStory: Number(a.UserStoryStatus ?? a.userStoryStatus ?? 0) > 0,
   };
   const posts = valid.map((p) => {
     const d = p.videoMeta?.duration ?? 0;

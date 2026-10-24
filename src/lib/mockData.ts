@@ -29,6 +29,15 @@ export interface ReelInsights {
   retentionWatchedPct?: number;
   retentionStopSec?: number;
   retentionCurve?: number[];
+  retentionHeading?: string;
+  retentionWatchedPrefix?: string;
+  retentionWatchedSuffix?: string;
+  retentionStopPrefix?: string;
+  retentionDescription?: string;
+  likesAtSec?: number;
+  likesHeading?: string;
+  likesTimePrefix?: string;
+  likesDescription?: string;
   likesCurve?: number[];
   likesAxis?: string[];
   likesFooter?: string[];

@@ -37,10 +37,10 @@ describe("bulk watch metrics tables", () => {
   it("keeps total play time formula unchanged", () => {
     expect(out[0]!.insights.totalPlayTime).toBe(Math.round(1074 / 1000 * settings.secondsPer1000Views));
   });
-  it("average watch time follows the views bucket (1050-1149 → 5.6-6.1s)", () => {
+  it("average watch time stays random between 5.8 and 7.4 seconds", () => {
     for (const r of out.slice(0, 2)) {
-      expect(r.insights.avgWatchTime).toBeGreaterThanOrEqual(5.6);
-      expect(r.insights.avgWatchTime).toBeLessThanOrEqual(6.1);
+      expect(r.insights.avgWatchTime).toBeGreaterThanOrEqual(5.8);
+      expect(r.insights.avgWatchTime).toBeLessThanOrEqual(7.4);
     }
   });
   it("watched full follows the views bucket (1950-2000 → 14.10-14.91%)", () => {

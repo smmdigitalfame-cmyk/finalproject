@@ -1,5 +1,26 @@
+import { useState, useEffect } from "react";
 import { Search, Link2, Users, Heart, MessageSquare, Music, User } from "lucide-react";
 import avatar from "@/assets/avatar.jpg";
+
+const InboxLoader = () => (
+  <div className="flex flex-col items-center gap-4 pt-10">
+    <div className="tiktok-loader">
+      <div className="tiktok-dot tiktok-dot-cyan" />
+      <div className="tiktok-dot tiktok-dot-red" />
+    </div>
+    <div className="w-full max-w-md px-4 space-y-3 mt-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 py-2">
+          <div className="w-11 h-11 rounded-full skeleton flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-32 skeleton rounded" />
+            <div className="h-3 w-48 skeleton rounded opacity-60" />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 const stories = [
   { id: "create", label: "Create", isCreate: true },
@@ -57,8 +78,25 @@ const chats = [
 ];
 
 const InboxPage = () => {
+  const [isLoading, setIsLoading] = useState(true);
+
+  // TikTok-style: show loading dots + skeleton for a moment before inbox appears
+  useEffect(() => {
+    setIsLoading(true);
+    const t = setTimeout(() => setIsLoading(false), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 overflow-y-auto pb-16 animate-in fade-in">
+        <InboxLoader />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto pb-16">
+    <div className="flex-1 overflow-y-auto pb-16 animate-in fade-in">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 h-12 mt-2">
         <Link2 className="w-6 h-6 text-foreground" />

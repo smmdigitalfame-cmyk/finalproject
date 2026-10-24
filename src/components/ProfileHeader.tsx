@@ -4,8 +4,8 @@ import { useState, useRef } from "react";
 import { z } from "zod";
 import { ReelData, formatNumber, generateRandomReel } from "@/lib/mockData";
 import { parseInputNumber } from "@/lib/utils";
-import { UserPlus, Grid3X3, Menu, Plus, Bookmark, Heart, Lock, Footprints, Share, ChevronDown, BadgeCheck, Sun, Moon } from "lucide-react";
-import { ShareIcon } from "@/components/ShareIcon";
+import { UserPlus, Grid3X3, Menu, Plus, Bookmark, Heart, Lock, Repeat2, Footprints, Share, ChevronDown, BadgeCheck, Sun, Moon } from "lucide-react";
+import { TTAddFriendIcon, TTFootprintsIcon, TTShareArrowIcon, TTMenuIcon, CountBadge } from "@/components/TikTokIcons";
 import avatar from "@/assets/avatar.jpg";
 import TikTokStudioPanel from "./TikTokStudioPanel";
 import { uploadToCloudinary } from "@/lib/cloudinary";
@@ -56,11 +56,22 @@ interface ProfileHeaderProps {
 const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSettings }: ProfileHeaderProps) => {
   const totalLikes = reels.reduce((sum, r) => sum + r.insights.likes, 0);
   const [profile, setProfile] = useState<ProfileData>(() => {
+    const defaults = {
+      username: "extipsinghtpro.store",
+      displayName: "Larp Insight",
+      bio: "Powerful tools by Larp Insight to customize, manage, and transform your social media insights.",
+    };
     const saved = typeof window === "undefined" ? null : localStorage.getItem("user_profile");
-    return saved ? JSON.parse(saved) : {
-      username: "officialzyrozo",
-      displayName: "Locus",
-      bio: "UGC Creator ✨\nProduct | Lifestyle | Reels\nHelping brands grow organically 🌱\n🧑‍🎨 Open for collaborations",
+    if (saved) {
+      const parsed = JSON.parse(saved) as ProfileData;
+      // Drop the old built-in fixed store link from previously saved profiles
+      if (parsed.bioLink?.replace(/^https?:\/\//i, "").replace(/\/$/, "") === "extipsinghtpro.store") delete parsed.bioLink;
+      // Replace the old built-in sample profile with the new default one
+      if (parsed.username === "officialzyrozo") return { ...parsed, ...defaults };
+      return parsed;
+    }
+    return {
+      ...defaults,
       statusText: "On your mind...",
       followers: "59",
       following: reels.length.toString(),
@@ -89,7 +100,18 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
     setFetchError(null);
     setIsFetchingTikTok(true);
     try {
-      const scraped = await scrapeTikTok({ data: { username: uname, count: 30 } });
+      let scraped: Awaited<ReturnType<typeof scrapeTikTok>> | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          scraped = await scrapeTikTok({ data: { username: uname, count: 30 } });
+          break;
+        } catch (netErr) {
+          // Flaky Wi-Fi / mobile data: retry the request before showing an error
+          if (attempt === 2) throw netErr;
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        }
+      }
+      if (!scraped) throw new Error("Network problem. Check your connection and try again.");
       if (scraped.error) throw new Error(scraped.error);
       const result = scraped.profile;
 
@@ -118,6 +140,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
         return next;
       });
 
+      try { localStorage.setItem("user_has_story", (result as { hasStory?: boolean }).hasStory ? "1" : "0"); } catch { /* ignore */ }
       if (result.avatar) {
         setAvatarPreview(result.avatar);
         try {
@@ -231,13 +254,16 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
       <div className="flex items-center justify-between px-4 h-11 mt-2">
 
 
-        <UserPlus className="w-7 h-7 text-foreground" />
+        <div className="relative text-foreground">
+          <TTAddFriendIcon className="w-[28px] h-[28px]" />
+          <CountBadge count={2} className="-top-[9px] left-[14px]" />
+        </div>
         <div className="flex-1" />
-        <div className="flex items-center gap-4">
-          <Footprints className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-          <ShareIcon className="w-6 h-6" variant="white" />
-          <Button variant="ghost" size="icon" aria-label="Video settings" title="Video settings" onClick={onOpenBulkSettings} className="h-7 w-7 [&_svg]:size-7">
-            <Menu className="text-foreground" strokeWidth={1.5} />
+        <div className="flex items-center gap-5 text-foreground">
+          <TTFootprintsIcon className="w-[27px] h-[27px]" />
+          <TTShareArrowIcon className="w-[27px] h-[27px]" />
+          <Button variant="ghost" size="icon" aria-label="Video settings" title="Video settings" onClick={onOpenBulkSettings} className="h-7 w-7 p-0 [&_svg]:size-7">
+            <TTMenuIcon />
           </Button>
         </div>
       </div>
@@ -299,6 +325,17 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
       {/* Bio / Links / TikTok Studio */}
       <div className="flex flex-col items-center text-center mt-1.5 px-8 mb-1">
         {profile.bio && <p className="text-foreground text-[14px] whitespace-pre-line font-medium leading-[1.3] mb-2">{profile.bio}</p>}
+        {profile.bioLink && (
+          <a
+            href={/^https?:\/\//i.test(profile.bioLink) ? profile.bioLink : `https://${profile.bioLink}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[14px] font-semibold text-[hsl(210_100%_60%)] mb-2 break-all"
+          >
+            <svg className="w-[14px] h-[14px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" /></svg>
+            {profile.bioLink.replace(/^https?:\/\//i, "").replace(/\/$/, "")}
+          </a>
+        )}
         <button className="flex items-center gap-1.5" onClick={() => setShowAnalytics(true)}>
           <svg className="w-[16px] h-[16px] text-[#fe2c55]" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C9.243 2 7 4.243 7 7C7 9.757 9.243 12 12 12C14.757 12 17 9.757 17 7C17 4.243 14.757 2 12 2Z"/>
@@ -316,6 +353,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
       <div className="flex mt-1.5 border-b border-border">
         <TabBtn active={activeTab === "grid"} onClick={() => onTabChange("grid")} icon={Grid3X3} />
         <TabBtn active={activeTab === "locked"} onClick={() => onTabChange("locked")} icon={Lock} />
+        <TabBtn active={activeTab === "reposts"} onClick={() => onTabChange("reposts")} icon={Repeat2} />
         <TabBtn active={activeTab === "saved"} onClick={() => onTabChange("saved")} icon={Bookmark} />
         <TabBtn active={activeTab === "liked"} onClick={() => onTabChange("liked")} icon={Heart} />
       </div>

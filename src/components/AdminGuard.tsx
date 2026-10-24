@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { checkAccessKey } from "@/lib/accessKeys.functions";
+import { getDeviceId } from "@/lib/deviceIdentity";
 
 interface AdminGuardProps {
   children: React.ReactNode;
@@ -70,7 +71,7 @@ const AdminGuard = ({ children }: AdminGuardProps) => {
 
   const verify = useCallback(async () => {
     const saved = localStorage.getItem("access_key");
-    const device_id = localStorage.getItem("device_id") || "";
+    const device_id = getDeviceId();
     if (!saved) {
       navigate({ to: "/key-login" });
       return;
@@ -91,7 +92,7 @@ const AdminGuard = ({ children }: AdminGuardProps) => {
     }
 
     let data: any = null;
-    try { data = await checkAccessKey({ data: { key: String(parsed.key_id || "") } }); } catch { data = null; }
+    try { data = await checkAccessKey({ data: { key: String(parsed.key_id || ""), device_id } }); } catch { data = null; }
     if (!mountedRef.current) return;
 
     if (!data || data.valid !== true) {

@@ -3,10 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { checkAccessKey } from "@/lib/accessKeys.functions";
-
-const getDeviceId = (): string => {
-  return localStorage.getItem("device_id") || "";
-};
+import { getDeviceId } from "@/lib/deviceIdentity";
 
 interface KeyGuardProps {
   children: React.ReactNode;
@@ -35,17 +32,10 @@ const KeyGuard = ({ children }: KeyGuardProps) => {
       const { key_id } = parsed;
 
 
-      // Check local expiry first
-      if (parsed.expires_at) {
-        const expiresAt = new Date(parsed.expires_at);
-        if (expiresAt <= new Date()) {
-          logout("Key has expired");
-          return;
-        }
-      }
+      // Expiry is decided by the server (an admin can extend a key, e.g. to lifetime)
 
       let data: any = null; let error: unknown = null;
-      try { data = await checkAccessKey({ data: { key: key_id } }); } catch (e) { error = e; }
+      try { data = await checkAccessKey({ data: { key: key_id, device_id: getDeviceId() } }); } catch (e) { error = e; }
 
       // Network error or server error — DON'T logout, just skip check
       if (error || !data) {
@@ -54,14 +44,20 @@ const KeyGuard = ({ children }: KeyGuardProps) => {
         return;
       }
 
-      // Only logout if server explicitly says key is invalid (revoked/expired/device mismatch)
+      // A temporary server/network hiccup must never log the user out
+      if (data.transient) {
+        if (!valid) setTimeout(checkKey, 2000);
+        return;
+      }
+
+      // Only logout if server explicitly says key is invalid (revoked/expired)
       if (data.valid !== true) {
         logout(data.reason || "Access revoked");
         return;
       }
 
       // Update expiry/admin from server if available
-      if (data?.expires_at) parsed.expires_at = data.expires_at;
+      parsed.expires_at = data.expires_at ?? null;
       if (typeof data?.is_admin === "boolean") parsed.is_admin = data.is_admin;
       localStorage.setItem("access_key", JSON.stringify(parsed));
 

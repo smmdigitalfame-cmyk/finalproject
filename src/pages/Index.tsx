@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from "react";
 import { generateMockReels, normalizeReelData, ReelData } from "@/lib/mockData";
 import ProfileHeader from "@/components/ProfileHeader";
+import PullToRefresh from "@/components/PullToRefresh";
 import VideoGrid from "@/components/VideoGrid";
 import BottomNav from "@/components/BottomNav";
 import { applyBulkInsights, applyBulkInsightsBatched, persistBulkResult, loadBulkSettings, type BulkInsightSettings } from "@/lib/bulkInsights";
 import { toast } from "sonner";
+import { refreshLegacyAudienceRegions } from "@/lib/audienceEstimates";
 
 
 // Code-split heavy overlays/panels — they only mount when needed
@@ -43,26 +45,9 @@ const uniqueReelsById = (reels: ReelData[]) =>
 const Index = () => {
   const [reels, setReels] = useState<ReelData[]>(() => {
     const padRegions = (rs: ReelData[]): ReelData[] => {
-      const fillers = [
-        { name: "United States", percentage: 9.1 },
-        { name: "Nigeria", percentage: 8.2 },
-        { name: "Indonesia", percentage: 4.4 },
-        { name: "France", percentage: 3.5 },
-        { name: "South Africa", percentage: 3.2 },
-        { name: "Brazil", percentage: 3.1 },
-        { name: "Ghana", percentage: 3.0 },
-        { name: "Egypt", percentage: 2.9 },
-        { name: "Côte d'Ivoire", percentage: 1.9 },
-        { name: "Colombia", percentage: 1.9 },
-        { name: "India", percentage: 1.8 },
-      ];
       return rs.map((raw, index) => {
         const r = normalizeReelData(raw, index);
-        let regions = r.insights?.audienceRegions ? [...r.insights.audienceRegions] : [];
-        // Keep customer-set locations, regardless of how many countries they use.
-        if (regions.length === 0) {
-          regions = [...fillers];
-        }
+        const regions = refreshLegacyAudienceRegions(r.id, r.insights.views, r.insights.audienceRegions);
         return { ...r, insights: { ...r.insights, audienceRegions: regions } };
       });
     };
@@ -254,7 +239,7 @@ const Index = () => {
 
       {/* Profile page */}
       {navTab === "profile" && (
-        <div
+        <PullToRefresh
           className="flex-1 min-h-0 overflow-y-scroll scrollbar-hide"
           style={{
             paddingBottom: 'calc(3.5rem + 8px + max(env(safe-area-inset-bottom, 0px), 8px))',
@@ -266,7 +251,7 @@ const Index = () => {
           <div className="pb-4">
             <VideoGrid reels={reels} onReelClick={handleReelClick} onAddReel={handleAddReel} />
           </div>
-        </div>
+        </PullToRefresh>
       )}
 
 

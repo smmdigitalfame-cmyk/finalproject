@@ -1,5 +1,8 @@
 import type { ReelData } from "./mockData";
 import { scrapeTikTok } from "./tiktok.functions";
+import { parseDuration } from "./utils";
+import { estimateAudienceRegions } from "./audienceEstimates";
+import { orderedAudienceRegions } from "./bulkInsights";
 
 export interface TikTokApiPost {
   id: string;
@@ -32,6 +35,12 @@ export const apiPostToReel = (p: TikTokApiPost, username: string): ReelData => {
   const comments = p.stats.comments || 0;
   const shares = p.stats.shares || 0;
   const saves = p.stats.saves || 0;
+  // Average watch time is a random-looking value between 5.8 and 7.4 seconds,
+  // seeded by the video id so repeat clones keep the same value.
+  const durationSec = parseDuration(p.duration);
+  const seed = p.id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const watchSeconds = 5.8 + ((seed % 100) / 100) * 1.6;
+  const avgWatchTime = views > 0 && durationSec > 0 ? Math.min(durationSec, Math.round(watchSeconds * 10) / 10) : 0;
   return {
     id: p.id,
     title: p.title || p.description || "",
@@ -50,16 +59,14 @@ export const apiPostToReel = (p: TikTokApiPost, username: string): ReelData => {
       comments,
       shares,
       saves,
-      avgWatchTime: Math.max(5, Math.floor((views > 0 ? 18 : 0))),
+      avgWatchTime,
       totalPlayTime: Math.floor(views * 0.005),
       reachedAudience: Math.floor(views * 0.8),
       profileVisits: Math.floor(views * 0.03),
       followsFromPost: Math.floor(views * 0.003),
       watchedFull: 70,
       trafficSources: { forYouPage: 70, following: 15, profile: 7, search: 4, sounds: 2, hashtags: 2 },
-      audienceRegions: [
-        { name: "United States", percentage: 9.1 }, { name: "Nigeria", percentage: 8.2 }, { name: "Indonesia", percentage: 4.4 }, { name: "France", percentage: 3.5 }, { name: "South Africa", percentage: 3.2 }, { name: "Brazil", percentage: 3.1 }, { name: "Ghana", percentage: 3.0 }, { name: "Egypt", percentage: 2.9 }, { name: "Côte d'Ivoire", percentage: 1.9 }, { name: "Colombia", percentage: 1.9 }, { name: "India", percentage: 1.8 },
-      ],
+      audienceRegions: orderedAudienceRegions(estimateAudienceRegions(p.id, views), p.id).map(({ region }) => region),
       viewsByDay: [
         { day: "Mon", views: Math.floor(views * 0.15) },
         { day: "Tue", views: Math.floor(views * 0.2) },

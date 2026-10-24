@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { createUploadQueue, isTransientUploadError } from "./uploadControl";
 import { authorizeMediaUpload } from "./mediaUpload.functions";
+import { getDeviceId } from "./deviceIdentity";
 
 const runUpload = createUploadQueue(2);
 const pendingUploads = new WeakMap<File, Promise<CloudinaryUploadResult>>();
@@ -164,7 +165,7 @@ const uploadFile = async (file: File, onProgress?: (percent: number) => void): P
   try { savedKey = JSON.parse(localStorage.getItem("access_key") || "null"); } catch { /* invalid session */ }
   const key = savedKey && typeof savedKey === "object" && "key_id" in savedKey && typeof savedKey.key_id === "string" ? savedKey.key_id : "";
   if (!key) throw new Error("Sign in with your project access key before uploading.");
-  const signed = await authorizeMediaUpload({ data: { key, path: fileName } });
+  const signed = await authorizeMediaUpload({ data: { key, device_id: getDeviceId(), path: fileName } });
   let result = await supabase.storage
     .from("media")
     .uploadToSignedUrl(signed.path, signed.token, uploadBlob, {

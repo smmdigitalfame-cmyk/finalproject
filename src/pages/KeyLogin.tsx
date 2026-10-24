@@ -3,13 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { checkAccessKey } from "@/lib/accessKeys.functions";
+import { getDeviceId } from "@/lib/deviceIdentity";
 import { Fingerprint, Send, Shield, Sparkles, Timer, MessageCircle, BadgeCheck } from "lucide-react";
-
-const getDeviceId = (): string => {
-  let id = localStorage.getItem("device_id");
-  if (!id) { id = crypto.randomUUID(); localStorage.setItem("device_id", id); }
-  return id;
-};
 
 const KeyLogin = () => {
   const [keyCode, setKeyCode] = useState("");
@@ -26,7 +21,12 @@ const KeyLogin = () => {
     if (!keyCode.trim()) return;
     setLoading(true);
     try {
-      const res = await checkAccessKey({ data: { key: keyCode.trim(), login: true } });
+      let res: Awaited<ReturnType<typeof checkAccessKey>> | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { res = await checkAccessKey({ data: { key: keyCode.trim(), device_id: getDeviceId(), login: true } }); break; }
+        catch (netErr) { if (attempt === 2) throw netErr; await new Promise((r) => setTimeout(r, 700 * (attempt + 1))); }
+      }
+      if (!res) throw new Error("network");
       if (!res.valid) {
         toast.error(res.reason);
         return;
@@ -116,6 +116,21 @@ const KeyLogin = () => {
             <div className="absolute inset-0 bg-primary-foreground/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
           </button>
         </form>
+
+        {/* Buy access */}
+        <a
+          href="https://extipsinghtpro.store/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-6 block rounded-2xl border border-primary/40 bg-primary/10 p-4 text-center transition-all hover:bg-primary/20 active:scale-[0.98]"
+        >
+          <p className="text-sm font-semibold text-foreground">Access key nahi hai?</p>
+          <p className="mt-1 text-xs text-muted-foreground">Monthly & Lifetime plans dekhein aur website se kharidein</p>
+          <span className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+            <Sparkles className="w-4 h-4" />
+            View Plans — extipsinghtpro.store
+          </span>
+        </a>
 
         {/* Trust features grid */}
         <div className="mt-12 grid grid-cols-2 gap-4">

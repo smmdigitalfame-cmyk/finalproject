@@ -23,6 +23,7 @@ export type Database = {
           is_admin: boolean
           key_code: string
           label: string | null
+          max_devices: number | null
           updated_at: string
           used_devices: Json
         }
@@ -34,6 +35,7 @@ export type Database = {
           is_admin?: boolean
           key_code: string
           label?: string | null
+          max_devices?: number | null
           updated_at?: string
           used_devices?: Json
         }
@@ -45,6 +47,7 @@ export type Database = {
           is_admin?: boolean
           key_code?: string
           label?: string | null
+          max_devices?: number | null
           updated_at?: string
           used_devices?: Json
         }
@@ -79,7 +82,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      check_access_key_device: {
+        Args: { p_device: string; p_key: string; p_register?: boolean }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

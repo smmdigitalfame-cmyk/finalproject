@@ -1,5 +1,6 @@
 import type { ReelData, ReelInsights } from "./mockData";
 import { parseDuration } from "./utils";
+import { defaultAudienceRegions, estimateAudienceRegions } from "./audienceEstimates";
 
 export interface BulkInsightSettings {
   enabled: boolean;
@@ -21,7 +22,7 @@ export const defaultBulkSettings: BulkInsightSettings = {
   averageWatchPercent: 90,
   watchedFullPercent: 10,
   trafficSources: { forYouPage: 70, following: 15, profile: 7, search: 4, sounds: 2, hashtags: 2 },
-  audienceRegions: [{ name: "India", percentage: 50 }, { name: "United States", percentage: 30 }, { name: "Other", percentage: 20 }],
+  audienceRegions: defaultAudienceRegions.map(region => ({ ...region })),
 };
 
 const validPercent = (value: number) => Number.isFinite(value) && value >= 0 && value <= 100;
@@ -50,28 +51,26 @@ function hashSeed(text: string): number {
   return value >>> 0;
 }
 
-// Pairwise transfers preserve 100% without multiplying or normalizing past the variation bounds.
-function countryEstimates(reel: ReelData, settings: BulkInsightSettings) {
-  const regions = settings.audienceRegions.map(region => ({ name: region.name.trim(), percentage: region.percentage }));
-  const range = Math.round((settings.countryVariation ?? 4) * 100);
-  for (let i = 0; i + 1 < regions.length; i += 2) {
-    const first = regions[i], second = regions[i + 1];
-    if (!first || !second || range === 0) continue;
-    const seed = hashSeed(`${reel.id}:${reel.insights.views}:${first.name}:${second.name}`);
-    const requested = seed % (2 * range + 1) - range;
-    const low = Math.ceil(Math.max(-range, -first.percentage * 100, (second.percentage - 100) * 100));
-    const high = Math.floor(Math.min(range, (100 - first.percentage) * 100, second.percentage * 100));
-    const delta = Math.max(low, Math.min(high, requested)) / 100;
-    first.percentage = Number((first.percentage + delta).toFixed(8));
-    second.percentage = Number((second.percentage - delta).toFixed(8));
-  }
-  return regions;
+const isUSA = (name: string) => /^(united states(?: of america)?|usa|u\.s\.a\.?|us|u\.s\.?)$/i.test(name.trim());
+
+// Keep source indexes for editors; percentages never determine this display order.
+export function orderedAudienceRegions(regions: ReelInsights["audienceRegions"], reelId: string) {
+  return regions.map((region, i) => ({ region, i }))
+    .sort((a, b) => Number(isUSA(b.region.name)) - Number(isUSA(a.region.name))
+      || hashSeed(`${reelId}:location-order:${a.region.name.trim().toLowerCase()}`) - hashSeed(`${reelId}:location-order:${b.region.name.trim().toLowerCase()}`)
+      || a.region.name.localeCompare(b.region.name));
 }
 
-// Default watch metrics come from views-based tables: every 50 views past 1000
-// moves to the next bucket; the exact value is deterministic inside the range.
-const AVG_WATCH_LOW = [5.5, 5.6, 5.7, 5.8, 5.9, 6.0, 6.2, 6.3, 6.4, 6.5, 6.6];
-const AVG_WATCH_HIGH = [6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.7, 6.8, 6.9, 7.0, 7.1];
+// Decimal transfers preserve the customer's total and each country's variation bounds.
+function countryEstimates(reel: ReelData, settings: BulkInsightSettings) {
+  const regions = estimateAudienceRegions(reel.id, reel.insights.views, settings.audienceRegions, settings.countryVariation ?? 4);
+  return orderedAudienceRegions(regions, reel.id).map(({ region }) => region);
+}
+
+// Default average watch time is a fixed random-looking band per video
+// (5.8-7.4s), deterministic per reel so repeat runs keep the same value.
+const AVG_MIN = 5.8;
+const AVG_MAX = 7.4;
 const FULL_LOW = [7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.8, 11.6, 12.4, 13.2, 14.1];
 const FULL_HIGH = [8.0, 8.5, 9.0, 9.5, 10.0, 10.8, 11.6, 12.4, 13.2, 14.1, 14.91];
 
@@ -84,9 +83,8 @@ function seededFraction(reel: ReelData, key: string): number {
 }
 
 function defaultAvgWatchSeconds(reel: ReelData, duration: number): number {
-  const bucket = viewsBucket(reel.insights.views);
-  const low = AVG_WATCH_LOW[bucket] ?? 5.5, high = AVG_WATCH_HIGH[bucket] ?? 6;
-  const value = low + seededFraction(reel, "avg") * (high - low);
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  const value = AVG_MIN + seededFraction(reel, "avg") * (AVG_MAX - AVG_MIN);
   return Math.min(duration, Math.round(value * 10) / 10);
 }
 

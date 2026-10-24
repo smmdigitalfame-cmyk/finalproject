@@ -1,3 +1,4 @@
+import ExpandableCaption from "@/components/ExpandableCaption";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { ReelData, formatNumber, formatViewsDisplay } from "@/lib/mockData";
 import { uploadToCloudinary } from "@/lib/cloudinary";
@@ -138,8 +139,17 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
+    // The browser asynchronously restores the previous viewer's scroll offset
+    // onto this fresh scroller (same history entry); disable that while open.
+    const prevRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
     const initialCard = cardRefs.current.get(reel.id);
-    if (initialCard) scroller.scrollTop = initialCard.offsetTop;
+    if (initialCard) {
+      const target = initialCard.offsetTop;
+      scroller.scrollTop = target;
+      // Re-assert after the frame in case a queued restore lands late.
+      requestAnimationFrame(() => { scroller.scrollTop = target; });
+    }
 
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
@@ -160,14 +170,17 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
       }
     }, { root: scroller, threshold: [0.65] });
     for (const card of cardRefs.current.values()) observer.observe(card);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      window.history.scrollRestoration = prevRestoration;
+    };
   }, [reel.id, reels, playReel]);
 
   const r = localReel;
   const ins = r.insights;
 
   return (
-    <div className="fixed inset-0 z-50 min-h-0 overflow-hidden bg-background">
+    <div className="fixed inset-0 z-50 min-h-0 overflow-hidden bg-background" data-detail-reel={reel.id}>
       <div
         ref={scrollerRef}
         className="absolute inset-0 h-[100dvh] min-h-0 overflow-y-scroll overscroll-y-contain touch-pan-y snap-y snap-mandatory scrollbar-hide"
@@ -301,10 +314,7 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
         </div>
 
         {/* Caption/description */}
-        <p className="text-white text-[14px] drop-shadow-lg leading-[1.4] mb-1 pr-14">
-          {r.description}
-          <span className="text-white/70 text-[13px]">...more</span>
-        </p>
+        <ExpandableCaption text={r.description} className="mb-1 pr-14" />
 
         {/* Music row - TikTok style */}
         {!r.musicHidden && (

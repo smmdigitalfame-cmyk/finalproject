@@ -8,7 +8,7 @@ const WINDOW_MS = 15 * 60_000;
 const KEY_PATTERN = /^TT-[0-9A-F]{12,32}$/;
 
 export const checkAccessKey = createServerFn({ method: "POST" })
-  .inputValidator((data) => z.object({ key: z.string().trim().min(1).max(64), login: z.boolean().optional() }).parse(data))
+  .inputValidator((data) => z.object({ key: z.string().trim().min(1).max(64), device_id: z.string().uuid().optional(), login: z.boolean().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const identityHeaders = new Headers();
@@ -35,12 +35,18 @@ export const checkAccessKey = createServerFn({ method: "POST" })
       return { valid: false as const, reason };
     };
 
-    const key = data.key.toUpperCase();
+    // Keys pasted from Telegram can carry spaces, invisible characters or a fancy dash; clean them up.
+    const key = data.key
+      .normalize("NFKC")
+      .replace(/[\s\u200B-\u200D\u2060\uFEFF`'"]/g, "")
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .toUpperCase();
     const { notifyAdmins, esc } = await import("@/lib/telegramNotify.server");
     const ua = esc((getRequestHeader("user-agent") || "unknown").slice(0, 120));
     const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
     const alertFail = async (reason: string) => {
-      if (data.login) await notifyAdmins(`⚠️ <b>Login failed</b>\nKey: <code>${esc(key.slice(0, 40))}</code>\nReason: ${esc(reason)}\nIP: ${esc(ip)}\nDevice: ${ua}\nTime: ${when} IST`);
+      // Only alert on the first failure per IP in the window, to avoid message spam from retries
+      if (data.login && (count ?? 0) === 0) await notifyAdmins(`⚠️ <b>Login failed</b>\nKey: <code>${esc(key.slice(0, 40))}</code>\nReason: ${esc(reason)}\nIP: ${esc(ip)}\nDevice: ${ua}\nTime: ${when} IST`);
     };
     if (!KEY_PATTERN.test(key)) return fail("Invalid ya revoked key");
 
@@ -51,20 +57,36 @@ export const checkAccessKey = createServerFn({ method: "POST" })
       .maybeSingle();
     if (error) {
       console.error("Access key check failed", error);
-      return { valid: false as const, reason: "Server error, retry karein" };
+      return { valid: false as const, transient: true as const, reason: "Server error, retry karein" };
     }
     if (!row || !row.is_active) return fail("Invalid ya revoked key");
     if (row.expires_at && new Date(row.expires_at) <= new Date()) {
       await alertFail("Key expired");
       return { valid: false as const, reason: "Key expire ho gayi" };
     }
-    // Real key always opens (80-bit keys can't be guessed); clear this IP's failed tries
+    const { data: deviceAllowed, error: deviceError } = await supabaseAdmin.rpc("check_access_key_device", {
+      p_key: key, p_device: data.device_id ?? "", p_register: data.login === true,
+    });
+    if (deviceError) {
+      console.error("Access key device check failed", deviceError);
+      return { valid: false as const, transient: true as const, reason: "Server error, retry karein" };
+    }
+    if (deviceAllowed !== true) return { valid: false as const, reason: "Is key ki device limit poori ho gayi. Pehle se registered device par login karein." };
+    // Confirmed key/device clears this IP's failed tries.
     if ((count ?? 0) > 0) {
       await supabaseAdmin.from("login_attempts").delete().eq("ip", ip).eq("success", false);
     }
     if (data.login) {
+      const { count: recent } = await supabaseAdmin
+        .from("login_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("ip", ip)
+        .eq("success", true)
+        .eq("key_code" as never, row.key_code as never)
+        .gte("created_at", new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString());
+      const alreadyNotified = (recent ?? 0) > 0;
       await supabaseAdmin.from("login_attempts").insert({ ip, success: true, key_code: row.key_code } as never);
-      await notifyAdmins(`✅ <b>Login success</b>\nName: ${esc(row.label ?? "-")}\nKey: <code>${row.key_code}</code>\nExpires: ${row.expires_at ? new Date(row.expires_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " IST" : "Lifetime"}\nIP: ${esc(ip)}\nDevice: ${ua}\nTime: ${when} IST`);
+      if (!alreadyNotified) await notifyAdmins(`✅ <b>Login success</b>\nName: ${esc(row.label ?? "-")}\nKey: <code>${row.key_code}</code>\nExpires: ${row.expires_at ? new Date(row.expires_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " IST" : "Lifetime"}\nIP: ${esc(ip)}\nDevice: ${ua}\nTime: ${when} IST`);
     }
     return {
       valid: true as const,

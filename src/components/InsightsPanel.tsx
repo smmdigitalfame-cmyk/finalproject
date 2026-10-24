@@ -4,6 +4,7 @@ import { ArrowLeft, Play, Heart, MessageCircle, Share2, Bookmark, Info, ChevronR
 import { CommentIcon } from "./CommentIcon";
 import { ShareIcon } from "@/components/ShareIcon";
 import { parseInputNumber, parseDuration, formatDuration } from "@/lib/utils";
+import { orderedAudienceRegions } from "@/lib/bulkInsights";
 
 const formatDurationDisplay = (raw: string): string => {
   if (!raw) return "0s";
@@ -22,6 +23,9 @@ const formatCount = (n: number): string => {
   if (n >= 10_000) return Math.floor(n / 1000) + "K";
   return n.toLocaleString("en-US");
 };
+
+const formatInsightMoment = (seconds: number): string =>
+  `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
 
 const formatPostedDate = (raw: string): string => {
@@ -92,7 +96,13 @@ const InsightsPanel = ({ reel, onClose, onSave }: InsightsPanelProps) => {
   const ins = localReel.insights;
   const [activeTab, setActiveTab] = useState<TabName>("overview");
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  // TikTok-style: show loading dots + skeleton for a moment before insights appear
+  useEffect(() => {
+    setIsLoading(true);
+    const t = setTimeout(() => setIsLoading(false), 1500);
+    return () => clearTimeout(t);
+  }, [reel.id]);
 
   useEffect(() => {
     setLocalReel(reel);
@@ -143,6 +153,12 @@ const InsightsPanel = ({ reel, onClose, onSave }: InsightsPanelProps) => {
       onContextMenu={e => e.preventDefault()}
     >
       <div className="max-w-lg mx-auto min-h-screen flex flex-col bg-[#f7f7f8] dark:bg-[#141414] shadow-2xl relative border-x border-border/50">
+        {isLoading && (
+          <div className="absolute inset-x-0 top-14 bottom-0 z-40 bg-[#f7f7f8] dark:bg-[#141414] px-4 pt-2 animate-in fade-in">
+            <TikTokDots />
+            <SkeletonCard />
+          </div>
+        )}
         {/* Top bar */}
         <div className="sticky top-0 bg-[#f7f7f8] dark:bg-[#141414] z-10 pt-safe pl-safe pr-safe">
           <div className="relative flex items-center h-[52px] px-3">
@@ -264,6 +280,7 @@ const EditableVal = ({ val, isEditing, className = "", onUpdate, id }: { val: st
   const reelId = useContext(ReelEditScopeContext);
   const storageKey = id && reelId ? `${reelId}:${id}` : null;
   const getInitialVal = () => {
+    if (onUpdate) return val;
     if (typeof window === "undefined") return val;
     try {
       const saved = storageKey ? localStorage.getItem("tiktok_overrides") : null;
@@ -272,7 +289,6 @@ const EditableVal = ({ val, isEditing, className = "", onUpdate, id }: { val: st
         if (overrides[storageKey] !== undefined) return overrides[storageKey];
       }
     } catch(e) {}
-    if (onUpdate) return val;
     return val;
   };
 
@@ -286,13 +302,14 @@ const EditableVal = ({ val, isEditing, className = "", onUpdate, id }: { val: st
   return (
     <span 
       contentEditable={isEditing} 
+      aria-label={isEditing ? id : undefined}
       suppressContentEditableWarning 
       onPointerDown={e => { if (isEditing) e.stopPropagation(); }}
       onBlur={(e) => {
         const text = e.currentTarget.textContent || "";
         setInternalVal(text);
         try {
-          if (storageKey) {
+          if (storageKey && !onUpdate) {
             const saved = localStorage.getItem("tiktok_overrides");
             const overrides = saved ? JSON.parse(saved) : {};
             overrides[storageKey] = text;
@@ -583,7 +600,7 @@ const buildTikTokDecayGraph = (raw: number[], totalViews: number) => {
 
 /* ═══════ OVERVIEW TAB ═══════ */
 const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insights"]; reel: ReelData; isEditing: boolean; onUpdate: (d: any) => void }) => {
-  type MetricKey = "views" | "totalPlayTime" | "avgWatchTime" | "watchedFull" | "followers";
+  type MetricKey = "views" | "totalPlayTime" | "avgWatchTime" | "followers";
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("views");
   const [retentionT, setRetentionT] = useState(0);
   const retentionSeekRef = useRef<((t: number) => void) | null>(null);
@@ -597,7 +614,6 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
     { key: "views", label: "Video views", value: formatViewsDisplay(ins.views), rawKey: "views" },
     { key: "totalPlayTime", label: "Total play time", value: formatDuration(ins.totalPlayTime), rawKey: "totalPlayTime" },
     { key: "avgWatchTime", label: "Average watch time", value: `${ins.avgWatchTime}s`, rawKey: "avgWatchTime" },
-    { key: "watchedFull", label: "Watched full video", value: `${ins.watchedFull}%`, rawKey: "watchedFull" },
     { key: "followers", label: "New followers", value: String(ins.followsFromPost), rawKey: "followsFromPost" },
   ];
 
@@ -640,9 +656,6 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
                       newVal = parseDuration(v);
                     } else if (m.key === "avgWatchTime") {
                       newVal = parseFloat(v.replace(/[^0-9.]/g, '')) || 0;
-                    } else if (m.key === "watchedFull") {
-                       // handled as percentage? 
-                       newVal = parseFloat(v.replace(/[^0-9.]/g, '')) || 0;
                     } else {
                       newVal = parseInputNumber(v);
                     }
@@ -709,28 +722,28 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
       <div className="bg-[#f7f7f8] dark:bg-[#141414] px-3 pt-2.5">
       <Card className="">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-foreground text-[18px] font-black tracking-tight"><EditableVal val="Retention rate" isEditing={isEditing} /></h3>
+          <h3 className="text-foreground text-[18px] font-black tracking-tight"><EditableVal val={ins.retentionHeading ?? "Retention rate"} isEditing={isEditing} id="retention-heading" onUpdate={(v) => onUpdate({ retentionHeading: v })} /></h3>
           <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
         </div>
         <p className="text-foreground text-[14px] font-black mt-3 leading-snug">
-          On average, viewers watched{" "}
+          <EditableVal val={ins.retentionWatchedPrefix ?? "On average, viewers watched"} isEditing={isEditing} id="retention-watched-prefix" onUpdate={(v) => onUpdate({ retentionWatchedPrefix: v })} />{" "}
           <EditableVal
             val={`${ins.retentionWatchedPct ?? Math.round((ins.avgWatchTime / 30) * 100)}`}
             isEditing={isEditing}
             id="retention-watched-pct"
             onUpdate={(v) => onUpdate({ retentionWatchedPct: parseFloat(v.replace(/[^0-9.]/g, '')) || 0 })}
           />
-          % of your video.
+          <EditableVal val={ins.retentionWatchedSuffix ?? "% of your video."} isEditing={isEditing} id="retention-watched-suffix" onUpdate={(v) => onUpdate({ retentionWatchedSuffix: v })} />
         </p>
         <p className="text-muted-foreground text-[13px] mt-1 mb-5 font-medium leading-snug">
-          Most viewers stopped watching at 0:
+          <EditableVal val={ins.retentionStopPrefix ?? "Most viewers stopped watching at"} isEditing={isEditing} id="retention-stop-prefix" onUpdate={(v) => onUpdate({ retentionStopPrefix: v })} />{" "}
           <EditableVal
-            val={String(ins.retentionStopSec ?? Math.max(2, Math.floor(ins.avgWatchTime * 0.3))).padStart(2, '0')}
+            val={formatInsightMoment(ins.retentionStopSec ?? Math.max(2, Math.floor(ins.avgWatchTime * 0.3)))}
             isEditing={isEditing}
             id="retention-stop-sec"
-            onUpdate={(v) => onUpdate({ retentionStopSec: Math.max(0, Math.min(59, Math.round(parseFloat(v.replace(/[^0-9.]/g, '')) || 0))) })}
+            onUpdate={(v) => onUpdate({ retentionStopSec: Math.max(0, Math.round(parseDuration(v) || 0)) })}
           />
-          . Check out the moment in your video where most viewers lost interest.
+          . <EditableVal val={ins.retentionDescription ?? "Check out the moment in your video where most viewers lost interest."} isEditing={isEditing} id="retention-desc" onUpdate={(v) => onUpdate({ retentionDescription: v })} />
         </p>
 
         <AnalyticsVideoFrame src={reel.thumbnail} videoUrl={reel.videoUrl} isEditing={isEditing} onProgress={setRetentionT} seekRef={retentionSeekRef} />
@@ -1475,6 +1488,7 @@ const DrawableGraph = ({
 };
 
 const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; isEditing: boolean; onUpdate: (d: any) => void }) => {
+  const reelEditScope = useContext(ReelEditScopeContext);
   const totalViewers = ins.views;
 
   const newViewerPct2 = ins.newViewerPct ?? 11;
@@ -1609,8 +1623,9 @@ const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; i
           <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
         </div>
         <div className="space-y-[18px]">
-          {ins.audienceRegions.map((region, i) => (
-            <MetricBar 
+          {orderedAudienceRegions(ins.audienceRegions, reelEditScope)
+            .map(({ region, i }) => (
+            <MetricBar
               key={i}
               label={region.name}
               value={region.percentage}
@@ -1642,21 +1657,28 @@ const EngagementTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insi
   <div>
     <Card className="">
       <div className="flex items-center gap-1.5 mb-2">
-        <h3 className="text-foreground text-[17px] font-black"><EditableVal val="Top words used in comments" isEditing={isEditing} /></h3>
+        <h3 className="text-foreground text-[17px] font-black"><EditableVal val="Top words used in comments" isEditing={isEditing} id="top-words-heading" /></h3>
         <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
       </div>
       <p className="text-muted-foreground text-[13px] font-medium leading-snug">
-        <EditableVal val="Top word insights are not ready yet. Please check back later." isEditing={isEditing} />
+        <EditableVal val="Top word insights are not ready yet. Please check back later." isEditing={isEditing} id="top-words-desc" />
       </p>
     </Card>
 
     <Card className="">
       <div className="flex items-center gap-1.5">
-        <h3 className="text-foreground text-[17px] font-black"><EditableVal val="Likes" isEditing={isEditing} /></h3>
+        <h3 className="text-foreground text-[17px] font-black"><EditableVal val={ins.likesHeading ?? "Likes"} isEditing={isEditing} id="likes-heading" onUpdate={(v) => onUpdate?.({ likesHeading: v })} /></h3>
         <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
       </div>
       <p className="text-muted-foreground text-[13px] mt-2 mb-4 font-medium leading-snug">
-        <EditableVal val="Most viewers liked this video at 0:00. Check out the moment where most viewers liked your video." isEditing={isEditing} />
+        <EditableVal val={ins.likesTimePrefix ?? "Most viewers liked this video at"} isEditing={isEditing} id="likes-time-prefix" onUpdate={(v) => onUpdate?.({ likesTimePrefix: v })} />{" "}
+        <EditableVal
+          val={formatInsightMoment(ins.likesAtSec ?? 0)}
+          isEditing={isEditing}
+          id="likes-at-sec"
+          onUpdate={(v) => onUpdate?.({ likesAtSec: Math.max(0, Math.round(parseDuration(v) || 0)) })}
+        />
+        . <EditableVal val={ins.likesDescription ?? "Check out the moment where most viewers liked your video."} isEditing={isEditing} id="likes-desc" onUpdate={(v) => onUpdate?.({ likesDescription: v })} />
       </p>
       
       <div className="aspect-[16/9] w-full rounded-md overflow-hidden relative mb-4 bg-muted border border-border/70 group">

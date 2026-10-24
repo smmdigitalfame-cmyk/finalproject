@@ -1,3 +1,4 @@
+import ExpandableCaption from "@/components/ExpandableCaption";
 import { useState, useRef, useCallback, useEffect, memo } from "react";
 import { ReelData, formatNumber, formatViewsDisplay } from "@/lib/mockData";
 import { parseInputNumber } from "@/lib/utils";
@@ -27,7 +28,7 @@ const HomeFeed = ({ reels, onSave }: HomeFeedProps) => {
             onClick={() => setActiveTopTab("explore")}
             className={`text-[16px] transition-colors ${activeTopTab === "explore" ? "text-white font-bold" : "text-white/60 font-medium"}`}
           >
-            Explore
+            Community
           </button>
           <div className="relative">
             <button
@@ -36,7 +37,6 @@ const HomeFeed = ({ reels, onSave }: HomeFeedProps) => {
             >
               Following
             </button>
-            <div className="absolute -top-0.5 -right-2 w-[6px] h-[6px] rounded-full bg-[hsl(var(--tiktok-red))]" />
           </div>
           <button
             onClick={() => setActiveTopTab("foryou")}
@@ -82,6 +82,11 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
   const mutedRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [liked, setLiked] = useState(false);
+  const [likePop, setLikePop] = useState(0);
+  const [bursts, setBursts] = useState<{ id: number; x: number; y: number; r: number }[]>([]);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTap = useRef(0);
 
   // Mount the <video> element only when the card is within ~1 viewport of the user.
   // Saves memory & network when there are 1000s of reels.
@@ -172,11 +177,33 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
 
 
 
+  const handleTap = (e: React.MouseEvent) => {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
+      const rect = containerRef.current?.getBoundingClientRect();
+      const id = now + Math.random();
+      setBursts((b) => [...b, { id, x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), r: Math.round(Math.random() * 40 - 20) }]);
+      setTimeout(() => setBursts((b) => b.filter((x) => x.id !== id)), 900);
+      if (!liked) { setLiked(true); setLikePop((n) => n + 1); }
+      lastTap.current = now;
+      return;
+    }
+    lastTap.current = now;
+    tapTimer.current = setTimeout(() => { tapTimer.current = null; togglePlayback(); }, 300);
+  };
+
+  const toggleLike = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLiked((v) => !v);
+    setLikePop((n) => n + 1);
+  };
+
   return (
     <div
       ref={containerRef}
       className="relative w-full h-[100dvh] snap-start flex-shrink-0 select-none"
-      onClick={togglePlayback}
+      onClick={handleTap}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Card wrapper */}
@@ -206,6 +233,10 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
           />
         )}
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 15%, transparent 50%, rgba(0,0,0,0.85) 100%)' }} />
+        {bursts.map((b) => (
+          <Heart key={b.id} className="like-burst pointer-events-none absolute z-20 w-24 h-24 text-[#fe2c55]" fill="currentColor"
+            style={{ left: b.x - 48, top: b.y - 48, ["--r" as string]: `${b.r}deg` }} />
+        ))}
         {reel.videoUrl && !playing && !videoError && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
             <PlayCircle className="h-16 w-16 text-white/90 drop-shadow-lg" fill="currentColor" />
@@ -221,13 +252,7 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
         {/* Bottom info */}
         <div className="absolute left-0 right-14 z-10 px-4" style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}>
           <p className="text-white font-bold text-[16px] drop-shadow-lg mb-1.5">{reel.title}</p>
-          <p className="text-white text-[14px] drop-shadow-lg leading-[1.4] mb-1.5 line-clamp-2">{reel.description}</p>
-          <div className="flex flex-wrap gap-1 mb-1">
-            {reel.tags.map((tag) => (
-              <span key={tag} className="text-white text-[13px] font-medium drop-shadow-lg">#{tag}</span>
-            ))}
-            <span className="text-white/70 text-[13px]">...more</span>
-          </div>
+          <ExpandableCaption text={reel.description} className="mb-1.5" />
           <div className="flex items-center gap-2 mt-2">
             {reel.musicCover ? <img src={reel.musicCover} alt="" className="w-5 h-5 rounded-sm object-cover flex-shrink-0" /> : <Music className="w-4 h-4 text-white flex-shrink-0" />}
             <span className="text-white text-[13px] drop-shadow-lg truncate">{reel.music}</span>
@@ -237,15 +262,27 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
 
       {/* Right side actions */}
       <div className="absolute right-3 bottom-36 z-10 flex flex-col items-center gap-5">
-        <div className="relative mb-1">
-          <div className="w-12 h-12 rounded-full overflow-hidden border-[2px] border-white">
-            <img src={localStorage.getItem("user_avatar") || avatar} alt="" className="w-full h-full object-cover" />
-          </div>
+        <div className="relative mb-3">
+          {localStorage.getItem("user_has_story") === "1" ? (
+            <div className="relative w-[52px] h-[52px]">
+              <div className="absolute inset-0 rounded-full animate-spin" style={{ animationDuration: "2.5s", background: "conic-gradient(#20d5ec, #2ee59d, #20d5ec, #1fb8f0, #20d5ec)" }} />
+              <div className="absolute inset-[3px] rounded-full overflow-hidden bg-black p-[2px]">
+                <img src={localStorage.getItem("user_avatar") || avatar} alt="" className="w-full h-full rounded-full object-cover" />
+              </div>
+            </div>
+          ) : (
+            <div className="w-12 h-12 rounded-full overflow-hidden border-[2px] border-white">
+              <img src={localStorage.getItem("user_avatar") || avatar} alt="" className="w-full h-full object-cover" />
+            </div>
+          )}
+          <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-[hsl(var(--tiktok-red))] flex items-center justify-center text-white text-[15px] font-bold leading-none">+</div>
         </div>
 
         <div className="flex flex-col items-center">
-          <Heart className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" />
-          <span className="text-white text-[12px] font-semibold mt-1 drop-shadow-lg">{formatNumber(ins.likes)}</span>
+          <button type="button" aria-label="Like" onClick={toggleLike} className="p-0 bg-transparent">
+            <Heart key={likePop} className={`w-8 h-8 drop-shadow-lg ${liked ? "text-[#fe2c55] like-pop" : "text-white"}`} fill="currentColor" />
+          </button>
+          <span className="text-white text-[12px] font-semibold mt-1 drop-shadow-lg">{formatNumber(ins.likes + (liked ? 1 : 0))}</span>
         </div>
         <div className="flex flex-col items-center">
           <CommentIcon className="w-8 h-8" invert />
@@ -264,7 +301,7 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
       {/* Spinning music disc */}
       <div className="absolute right-3 z-10" style={{ bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
         <div className="w-[40px] h-[40px] rounded-full overflow-hidden border-[5px] border-[#282828] animate-spin" style={{ animationDuration: '3s' }}>
-          <img src={reel.musicCover || avatar} alt="" className="w-full h-full object-cover" />
+          <img src={reel.musicCover || localStorage.getItem("user_avatar") || avatar} alt="" className="w-full h-full object-cover" />
         </div>
       </div>
     </div>
