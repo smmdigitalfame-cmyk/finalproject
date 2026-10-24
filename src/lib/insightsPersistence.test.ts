@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { generateRandomReel, normalizeReelData } from "./mockData";
 
 describe("per-reel insight persistence", () => {
+  it("preserves individual average watch time and full-watch percentage after saving", () => {
+    const reel = generateRandomReel(2);
+    reel.insights.avgWatchTime = 6.8;
+    reel.insights.watchedFull = 14.84;
+    const restored = normalizeReelData(JSON.parse(JSON.stringify(reel)));
+    expect(restored.insights.avgWatchTime).toBe(6.8);
+    expect(restored.insights.watchedFull).toBe(14.84);
+  });
   it("preserves customized insight moments and curves through saved reel normalization", () => {
     const reel = generateRandomReel(1);
     reel.insights.likesAtSec = 84;

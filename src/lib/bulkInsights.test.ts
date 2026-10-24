@@ -12,25 +12,79 @@ const reel = (views: number, duration = "0:30"): ReelData => ({
 });
 
 describe("bulk video estimator", () => {
-  test("custom full watch percentage applies to every video including zero", async () => {
+  test("custom full watch base 10 varies from 7 to 14 with decimal values", () => {
+    const input = Array.from({ length: 100 }, (_, i) => reel(1000 + i));
+    const custom = { ...settings, watchedFullOverridePercent: 10 };
+    const output = applyBulkInsights(input, custom);
+    const values = output.map(video => video.insights.watchedFull);
+    expect(new Set(values).size).toBeGreaterThan(20);
+    expect(values.some(value => value < 10)).toBe(true);
+    expect(values.some(value => value > 10)).toBe(true);
+    expect(values.some(value => !Number.isInteger(value))).toBe(true);
+    for (const value of values) {
+      expect(value).toBeGreaterThanOrEqual(7);
+      expect(value).toBeLessThanOrEqual(14);
+      expect(value).toBe(Number(value.toFixed(1)));
+    }
+    expect(applyBulkInsights(output, custom)).toEqual(output);
+    expect(applyBulkInsights([...input].reverse(), custom).reverse()).toEqual(output);
+  });
+  test("custom full watch variation preserves zero and stays within 0 to 100", async () => {
     const input = [reel(1000), reel(1950)];
-    expect(applyBulkInsights(input, { ...settings, watchedFullOverridePercent: 14.84 }).map(video => video.insights.watchedFull)).toEqual([14.84, 14.84]);
     expect((await applyBulkInsightsBatched(input, { ...settings, watchedFullOverridePercent: 0 })).map(video => video.insights.watchedFull)).toEqual([0, 0]);
+    for (const base of [1, 99, 100]) {
+      const custom = { ...settings, watchedFullOverridePercent: base };
+      const output = applyBulkInsights(input, custom);
+      expect(await applyBulkInsightsBatched(input, custom)).toEqual(output);
+      for (const video of output) {
+        expect(video.insights.watchedFull).toBeGreaterThanOrEqual(Math.max(0, base - 3));
+        expect(video.insights.watchedFull).toBeLessThanOrEqual(Math.min(100, base + 4));
+      }
+    }
   });
   test("custom full watch percentage accepts 0 to 100 and rejects invalid values", () => {
     for (const value of [-1, 101, NaN, Infinity]) expect(validateBulkSettings({ ...settings, watchedFullOverridePercent: value })).not.toBeNull();
     expect(validateBulkSettings({ ...settings, watchedFullOverridePercent: 100 })).toBeNull();
   });
-  test("USA stays first even with a lower percentage and other countries vary by reel", () => {
+  test("all countries sort by descending percentage even when USA has a smaller share", () => {
     const regions = [{ name: "India", percentage: 50 }, { name: "United States", percentage: 5 }, { name: "Brazil", percentage: 15 }, { name: "France", percentage: 10 }, { name: "Nigeria", percentage: 10 }, { name: "Other", percentage: 10 }];
     const orders = Array.from({ length: 30 }, (_, i) => orderedAudienceRegions(regions, String(i)));
     for (const order of orders) {
-      expect(order[0]?.region.name).toBe("United States");
-      expect(order[0]?.i).toBe(1);
+      expect(order.map(item => item.region.percentage)).toEqual([50, 15, 10, 10, 10, 5]);
+      expect(order.find(item => item.region.name === "United States")?.i).toBe(1);
       expect(order.map(item => item.region).sort((a,b) => a.name.localeCompare(b.name))).toEqual([...regions].sort((a,b) => a.name.localeCompare(b.name)));
     }
-    expect(new Set(orders.map(order => order.map(item => item.region.name).join(","))).size).toBeGreaterThan(3);
+    expect(new Set(orders.map(order => order.map(item => item.region.name).join(","))).size).toBe(1);
     expect(orderedAudienceRegions([...regions].reverse(), "a").map(item => item.region)).toEqual(orderedAudienceRegions(regions, "a").map(item => item.region));
+  });
+  test("the screenshot's 17.86 goes above 13.93 without moving values to another country", () => {
+    const regions = [
+      { name: "United States", percentage: 49.87 },
+      { name: "United Kingdom", percentage: 13.93 },
+      { name: "Singapore", percentage: 17.86 },
+      { name: "Saudi Arabia", percentage: 5.14 },
+      { name: "Canada", percentage: 8.98 },
+      { name: "Australia", percentage: 2.12 },
+      { name: "France", percentage: 2.1 },
+    ];
+    const ordered = orderedAudienceRegions(regions, "screenshot");
+    expect(ordered.map(item => item.region.percentage)).toEqual([49.87, 17.86, 13.93, 8.98, 5.14, 2.12, 2.1]);
+    expect(ordered.map(item => item.region.name)).toEqual(["United States", "Singapore", "United Kingdom", "Canada", "Saudi Arabia", "Australia", "France"]);
+    for (const item of ordered) expect(item.region).toBe(regions[item.i]);
+    expect(regions[1]).toEqual({ name: "United Kingdom", percentage: 13.93 });
+  });
+  test("every bulk video's varied countries remain descending through Push and reload", () => {
+    const input = Array.from({ length: 100 }, (_, i) => reel(1000 + i));
+    const output = applyBulkInsights(input, settings);
+    expect(new Set(output.map(video => JSON.stringify(video.insights.audienceRegions))).size).toBeGreaterThan(10);
+    for (const video of output) {
+      const percentages = video.insights.audienceRegions.map(region => region.percentage);
+      expect(percentages).toEqual([...percentages].sort((a, b) => b - a));
+      expect(percentages.reduce((sum, value) => sum + value, 0)).toBeCloseTo(100, 8);
+      const reloaded: ReelData = JSON.parse(JSON.stringify(video));
+      expect(orderedAudienceRegions(reloaded.insights.audienceRegions, reloaded.id).map(item => item.region)).toEqual(video.insights.audienceRegions);
+    }
+    expect(applyBulkInsights(output, settings)).toEqual(output);
   });
   test("base eight varies per video within three seconds either side including decimals", () => {
     const input = Array.from({ length: 100 }, (_, i) => reel(1000 + i, "0:22"));
@@ -87,12 +141,14 @@ describe("bulk video estimator", () => {
     expect(value).toBeGreaterThan(0);
     expect(value).toBeLessThanOrEqual(4);
   });
-  test("watched full percentage comes from the views bucket table", () => {
-    const [low, high] = applyBulkInsights([reel(1000), reel(1950)], settings).map(r => r.insights.watchedFull);
-    expect(low).toBeGreaterThanOrEqual(7.5);
-    expect(low).toBeLessThanOrEqual(8.0);
-    expect(high).toBeGreaterThanOrEqual(14.1);
-    expect(high).toBeLessThanOrEqual(14.91);
+  test("automatic full watch varies between 9 and 14 percent with one decimal", () => {
+    const values = applyBulkInsights(Array.from({ length: 100 }, (_, i) => reel(1000 + i)), settings).map(video => video.insights.watchedFull);
+    expect(new Set(values).size).toBeGreaterThan(20);
+    for (const value of values) {
+      expect(value).toBeGreaterThanOrEqual(9);
+      expect(value).toBeLessThanOrEqual(14);
+      expect(value).toBe(Number(value.toFixed(1)));
+    }
   });
   test("country and traffic settings apply without sharing mutable objects", () => {
     const output = applyBulkInsights([reel(1000), reel(2000)], settings);
@@ -170,7 +226,9 @@ describe("bulk video estimator", () => {
       expect(applyBulkInsights([reel(2000)], loadBulkSettings())[0]?.insights.totalPlayTime).toBe(7200);
       expect(loadBulkSettings().averageWatchSeconds).toBe(12);
       expect(loadBulkSettings().watchedFullOverridePercent).toBe(14.84);
-      expect(applyBulkInsights([reel(2000)], loadBulkSettings())[0]?.insights.watchedFull).toBe(14.84);
+      const full = applyBulkInsights([reel(2000)], loadBulkSettings())[0]?.insights.watchedFull;
+      expect(full).toBeGreaterThanOrEqual(11.84);
+      expect(full).toBeLessThanOrEqual(18.84);
       expect(applyBulkInsights([reel(2000, "0:22")], loadBulkSettings())).toEqual(applyBulkInsights([reel(2000, "0:22")], custom));
     } finally {
       if (previous) Object.defineProperty(globalThis, "localStorage", previous); else Reflect.deleteProperty(globalThis, "localStorage");

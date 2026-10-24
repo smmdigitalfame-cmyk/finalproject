@@ -2,6 +2,9 @@ import type { ReelInsights } from "./mockData";
 
 type Regions = ReelInsights["audienceRegions"];
 
+// Display precision is independent of saved estimates and custom country totals.
+export const formatCountryPercentage = (percentage: number): string => percentage.toFixed(1);
+
 export const defaultAudienceRegions: Regions = [
   { name: "United States", percentage: 48 },
   { name: "United Kingdom", percentage: 19 },

@@ -5,6 +5,8 @@ import { CommentIcon } from "./CommentIcon";
 import { ShareIcon } from "@/components/ShareIcon";
 import { parseInputNumber, parseDuration, formatDuration } from "@/lib/utils";
 import { orderedAudienceRegions } from "@/lib/bulkInsights";
+import { formatCountryPercentage } from "@/lib/audienceEstimates";
+import { Button } from "@/components/ui/button";
 
 const formatDurationDisplay = (raw: string): string => {
   if (!raw) return "0s";
@@ -386,7 +388,7 @@ const GenderRow = ({ color, label, pct, isEditing, onUpdate, className = "", sho
 
 );
 
-const MetricBar = ({ label, value, isEditing, onUpdate, onLabelUpdate, color = "#00a1ff", bgOpacity = "" }: { label: string; value: number; isEditing: boolean; onUpdate?: (v: number) => void; onLabelUpdate?: (v: string) => void; color?: string; bgOpacity?: string }) => {
+const MetricBar = ({ label, value, isEditing, onUpdate, onLabelUpdate, color = "#00a1ff", bgOpacity = "", countryPercentage = false }: { label: string; value: number; isEditing: boolean; onUpdate?: (v: number) => void; onLabelUpdate?: (v: string) => void; color?: string; bgOpacity?: string; countryPercentage?: boolean }) => {
   const [currentValue, setCurrentValue] = useState(value);
   const [barWidth, setBarWidth] = useState(value);
   const [currentLabel, setCurrentLabel] = useState(label);
@@ -414,7 +416,7 @@ const MetricBar = ({ label, value, isEditing, onUpdate, onLabelUpdate, color = "
     <div>
       <div className="flex justify-between items-center text-[15px] mb-2 font-bold leading-tight">
         <span className="text-foreground/90 truncate pr-2"><EditableVal val={currentLabel} isEditing={isEditing} onUpdate={onLabelUpdate ? (v) => { setCurrentLabel(v); onLabelUpdate(v); } : undefined} /></span>
-        <span className="text-foreground font-black"><EditableVal val={`${currentValue}%`} isEditing={isEditing} onUpdate={handleUpdate} /></span>
+        <span className="text-foreground font-black"><EditableVal val={`${countryPercentage ? formatCountryPercentage(currentValue) : currentValue}%`} isEditing={isEditing} onUpdate={handleUpdate} /></span>
       </div>
       <div className={`w-full h-[12px] bg-[#e5e7eb] dark:bg-[#2a2a2a] overflow-hidden mt-1.5 relative`}>
         <div 
@@ -600,7 +602,7 @@ const buildTikTokDecayGraph = (raw: number[], totalViews: number) => {
 
 /* ═══════ OVERVIEW TAB ═══════ */
 const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insights"]; reel: ReelData; isEditing: boolean; onUpdate: (d: any) => void }) => {
-  type MetricKey = "views" | "totalPlayTime" | "avgWatchTime" | "followers";
+  type MetricKey = "views" | "totalPlayTime" | "avgWatchTime" | "watchedFull" | "followers";
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("views");
   const [retentionT, setRetentionT] = useState(0);
   const retentionSeekRef = useRef<((t: number) => void) | null>(null);
@@ -614,6 +616,7 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
     { key: "views", label: "Video views", value: formatViewsDisplay(ins.views), rawKey: "views" },
     { key: "totalPlayTime", label: "Total play time", value: formatDuration(ins.totalPlayTime), rawKey: "totalPlayTime" },
     { key: "avgWatchTime", label: "Average watch time", value: `${ins.avgWatchTime}s`, rawKey: "avgWatchTime" },
+    { key: "watchedFull", label: "Watched full video", value: `${ins.watchedFull}%`, rawKey: "watchedFull" },
     { key: "followers", label: "New followers", value: String(ins.followsFromPost), rawKey: "followsFromPost" },
   ];
 
@@ -632,19 +635,21 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
         
         <div className="grid grid-cols-2 gap-4">
           {metricCards.map((m) => (
-            <button
+            <Button
               key={m.key}
+              variant="ghost"
+              aria-pressed={selectedMetric === m.key}
               onClick={() => setSelectedMetric(m.key)}
-              className={`rounded-2xl p-3.5 text-left min-h-[74px] w-full flex flex-col justify-center ${
+              className={`rounded-2xl p-3.5 text-left h-auto min-h-[80px] min-w-0 w-full items-start flex flex-col justify-center gap-0 whitespace-normal ${
                 selectedMetric === m.key
-                  ? "bg-[#F4F8FF] border-2 border-[#A8D3FF] dark:bg-[#00a1ff1c] dark:border-[#00a1ff33]"
-                  : "border border-[#E5E5E5] dark:border-border bg-white dark:bg-card"
+                  ? "bg-tiktok-blue/5 border-2 border-tiktok-blue/35 hover:bg-tiktok-blue/10"
+                  : "border border-border bg-card hover:bg-muted"
               }`}
             >
-              <p className="text-[#111111] dark:text-foreground text-[14px] font-semibold mb-0.5 line-clamp-1">
+              <p className="text-foreground text-[14px] font-semibold mb-0.5">
                 <EditableVal val={m.label} isEditing={isEditing} />
               </p>
-              <p className="text-black dark:text-foreground text-[24px] font-bold leading-tight break-words" style={{ letterSpacing: '-0.5px' }}>
+              <p className="max-w-full text-foreground text-[24px] font-bold leading-tight break-all">
 
                 <EditableVal 
                   val={m.value} 
@@ -656,6 +661,10 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
                       newVal = parseDuration(v);
                     } else if (m.key === "avgWatchTime") {
                       newVal = parseFloat(v.replace(/[^0-9.]/g, '')) || 0;
+                    } else if (m.key === "watchedFull") {
+                      const percentage = parseFloat(v.replace(/%/g, ""));
+                      if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return;
+                      newVal = percentage;
                     } else {
                       newVal = parseInputNumber(v);
                     }
@@ -674,7 +683,7 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
                 }} 
                 />
               </p>
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -1626,6 +1635,7 @@ const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; i
           {orderedAudienceRegions(ins.audienceRegions, reelEditScope)
             .map(({ region, i }) => (
             <MetricBar
+              countryPercentage
               key={i}
               label={region.name}
               value={region.percentage}

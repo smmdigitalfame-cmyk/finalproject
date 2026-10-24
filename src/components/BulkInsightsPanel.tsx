@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { applyBulkInsights, BULK_SETTINGS_KEY, loadBulkSettings, validateBulkSettings, type BulkInsightSettings } from "@/lib/bulkInsights";
 import type { ReelData } from "@/lib/mockData";
 import { formatDuration } from "@/lib/utils";
+import { formatCountryPercentage } from "@/lib/audienceEstimates";
 
 const sourceLabels: Record<keyof BulkInsightSettings["trafficSources"], string> = {
   forYouPage: "For You", following: "Following", profile: "Personal profile", search: "Search", sounds: "Sounds", hashtags: "Other",
@@ -77,13 +78,14 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
           <h3 className="font-semibold">Average watch time</h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-average-auto" className="text-sm">Auto</label><Switch id="bulk-average-auto" checked={draft.averageWatchSeconds === undefined} onCheckedChange={auto => update({ averageWatchSeconds: auto ? undefined : 12 })} /></div>
-            {draft.averageWatchSeconds !== undefined && <label className="flex items-center justify-between gap-3 text-sm">Average watch time per video<div className="flex items-center gap-2"><Input aria-label="Average watch time seconds" className="w-24 text-right" type="number" min={0} step={0.1} value={draft.averageWatchSeconds} onChange={event => update({ averageWatchSeconds: Number(event.target.value) })} /><span className="text-sm text-muted-foreground">s</span></div></label>}
+            <label className="flex items-center justify-between gap-3 text-sm">Average watch time per video<div className="flex items-center gap-2"><Input aria-label="Average watch time seconds" className="w-24 text-right" type="number" min={0} step={0.1} disabled={draft.averageWatchSeconds === undefined} placeholder="Auto" value={draft.averageWatchSeconds ?? ""} onChange={event => update({ averageWatchSeconds: Number(event.target.value) })} /><span className="text-sm text-muted-foreground">s</span></div></label>
           </div>
         </section>
         <section className="space-y-4 border-b border-border py-5">
           <h3 className="font-semibold">Watched full video</h3>
           <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-full-auto" className="text-sm">Auto</label><Switch id="bulk-full-auto" checked={draft.watchedFullOverridePercent === undefined} onCheckedChange={auto => update({ watchedFullOverridePercent: auto ? undefined : draft.watchedFullPercent })} /></div>
           {draft.watchedFullOverridePercent !== undefined && <PercentControl label="Watched full video percentage" value={draft.watchedFullOverridePercent} onChange={value => update({ watchedFullOverridePercent: value })} />}
+          {draft.watchedFullOverridePercent === undefined && <label className="flex items-center justify-between gap-3 text-sm">Watched full video percentage<div className="flex items-center gap-2"><Input aria-label="Watched full video percentage" className="w-20 text-right" type="number" disabled placeholder="Auto" value="" /><span className="text-muted-foreground text-sm">%</span></div></label>}
         </section>
         <section className="space-y-4 border-b border-border py-5">
           <div className="flex justify-between gap-3"><h3 className="font-semibold">Traffic sources</h3><span className={`text-sm ${Math.abs(trafficTotal - 100) < 0.01 ? "text-tiktok-success" : "text-destructive"}`}>{Number(trafficTotal.toFixed(2))} / 100%</span></div>
@@ -92,11 +94,11 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
           </div>
         </section>
         <section className="space-y-3 border-b border-border py-5">
-          <div className="flex justify-between gap-3"><h3 className="font-semibold">Audience locations</h3><span className={`text-sm ${Math.abs(countryTotal - 100) < 0.01 ? "text-tiktok-success" : "text-destructive"}`}>{Number(countryTotal.toFixed(2))} / 100%</span></div>
+          <div className="flex justify-between gap-3"><h3 className="font-semibold">Audience locations</h3><span className={`text-sm ${Math.abs(countryTotal - 100) < 0.01 ? "text-tiktok-success" : "text-destructive"}`}>{formatCountryPercentage(countryTotal)} / 100%</span></div>
           <label className="flex items-center justify-between gap-3 text-sm">Country variation (± points)<Input aria-label="Country variation" className="w-20" type="number" min={0} max={4} step={0.1} value={draft.countryVariation ?? 4} onChange={event => update({ countryVariation: Number(event.target.value) })} /></label>
           {draft.audienceRegions.map((region, index) => <div key={index} className="flex items-center gap-2">
             <Input aria-label={`Country ${index + 1}`} className="min-w-0 flex-1" value={region.name} placeholder="Country" onChange={event => update({ audienceRegions: draft.audienceRegions.map((item, i) => i === index ? { ...item, name: event.target.value } : item) })} />
-            <Input aria-label={`Country ${index + 1} percentage`} className="w-20" type="number" min={0} max={100} step={0.01} value={region.percentage} onChange={event => update({ audienceRegions: draft.audienceRegions.map((item, i) => i === index ? { ...item, percentage: Number(event.target.value) } : item) })} />
+            <Input aria-label={`Country ${index + 1} percentage`} className="w-20" type="number" min={0} max={100} step={0.1} value={formatCountryPercentage(region.percentage)} onChange={event => update({ audienceRegions: draft.audienceRegions.map((item, i) => i === index ? { ...item, percentage: Number(event.target.value) } : item) })} />
             <span className="text-sm text-muted-foreground">%</span>
             <Button variant="ghost" size="icon" aria-label={`Remove country ${index + 1}`} title="Remove country" onClick={() => update({ audienceRegions: draft.audienceRegions.filter((_, i) => i !== index) })}><Trash2 /></Button>
           </div>)}
@@ -107,7 +109,7 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
           {reels.length === 0 ? <p className="text-sm text-muted-foreground">No fetched videos yet.</p> : error ? <p className="text-sm text-muted-foreground">Preview unavailable until percentages are valid.</p> : <div className="overflow-x-auto">
             <table className="w-full min-w-[440px] text-left text-xs">
               <thead className="text-muted-foreground"><tr><th className="pb-3 font-medium">Video</th><th className="pb-3 font-medium">Views</th><th className="pb-3 font-medium">Total play</th><th className="pb-3 font-medium">Average</th><th className="pb-3 font-medium">Full</th><th className="pb-3 font-medium">Countries</th></tr></thead>
-              <tbody>{previews.map(reel => <tr key={reel.id} className="border-t border-border"><td className="max-w-40 py-3 pr-2"><div className="flex items-center gap-2">{reel.thumbnail && <img loading="lazy" decoding="async" src={reel.thumbnail} alt="" className="h-12 w-9 shrink-0 rounded object-cover" />}<div className="min-w-0"><p className="max-w-28 truncate" title={reel.title}>{reel.title}</p><p className="mt-1 text-muted-foreground">{reel.duration}</p></div></div></td><td className="pr-2">{reel.insights.views.toLocaleString()}</td><td className="pr-2 whitespace-nowrap">{formatDuration(reel.insights.totalPlayTime)}</td><td className="pr-2">{reel.insights.avgWatchTime}s</td><td className="pr-3">{reel.insights.watchedFull}%</td><td className="min-w-36 py-2">{reel.insights.audienceRegions.map(region => <p key={region.name}>{region.name} {Number(region.percentage.toFixed(2))}%</p>)}</td></tr>)}</tbody>
+              <tbody>{previews.map(reel => <tr key={reel.id} className="border-t border-border"><td className="max-w-40 py-3 pr-2"><div className="flex items-center gap-2">{reel.thumbnail && <img loading="lazy" decoding="async" src={reel.thumbnail} alt="" className="h-12 w-9 shrink-0 rounded object-cover" />}<div className="min-w-0"><p className="max-w-28 truncate" title={reel.title}>{reel.title}</p><p className="mt-1 text-muted-foreground">{reel.duration}</p></div></div></td><td className="pr-2">{reel.insights.views.toLocaleString()}</td><td className="pr-2 whitespace-nowrap">{formatDuration(reel.insights.totalPlayTime)}</td><td className="pr-2">{reel.insights.avgWatchTime}s</td><td className="pr-3">{reel.insights.watchedFull}%</td><td className="min-w-36 py-2">{reel.insights.audienceRegions.map(region => <p key={region.name}>{region.name} {formatCountryPercentage(region.percentage)}%</p>)}</td></tr>)}</tbody>
             </table>
           </div>}
           {pageCount > 1 && <div className="mt-3 flex items-center justify-end gap-3"><Button variant="ghost" size="icon" title="Previous videos" aria-label="Previous videos" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft /></Button><span className="text-xs text-muted-foreground">{currentPage + 1} / {pageCount}</span><Button variant="ghost" size="icon" title="Next videos" aria-label="Next videos" disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight /></Button></div>}

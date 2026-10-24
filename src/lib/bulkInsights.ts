@@ -51,13 +51,10 @@ function hashSeed(text: string): number {
   return value >>> 0;
 }
 
-const isUSA = (name: string) => /^(united states(?: of america)?|usa|u\.s\.a\.?|us|u\.s\.?)$/i.test(name.trim());
-
-// Keep source indexes for editors; percentages never determine this display order.
-export function orderedAudienceRegions(regions: ReelInsights["audienceRegions"], reelId: string) {
+// Sort complete country/value pairs, retaining source indexes for individual editors.
+export function orderedAudienceRegions(regions: ReelInsights["audienceRegions"], _reelId: string) {
   return regions.map((region, i) => ({ region, i }))
-    .sort((a, b) => Number(isUSA(b.region.name)) - Number(isUSA(a.region.name))
-      || hashSeed(`${reelId}:location-order:${a.region.name.trim().toLowerCase()}`) - hashSeed(`${reelId}:location-order:${b.region.name.trim().toLowerCase()}`)
+    .sort((a, b) => b.region.percentage - a.region.percentage
       || a.region.name.localeCompare(b.region.name));
 }
 
@@ -71,12 +68,6 @@ function countryEstimates(reel: ReelData, settings: BulkInsightSettings) {
 // (5.8-7.4s), deterministic per reel so repeat runs keep the same value.
 const AVG_MIN = 5.8;
 const AVG_MAX = 7.4;
-const FULL_LOW = [7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.8, 11.6, 12.4, 13.2, 14.1];
-const FULL_HIGH = [8.0, 8.5, 9.0, 9.5, 10.0, 10.8, 11.6, 12.4, 13.2, 14.1, 14.91];
-
-function viewsBucket(views: number): number {
-  return Math.min(10, Math.max(0, Math.floor((views - 1000) / 50)));
-}
 
 function seededFraction(reel: ReelData, key: string): number {
   return hashSeed(`${reel.id}:${reel.insights.views}:${key}`) / 4294967295;
@@ -89,9 +80,15 @@ function defaultAvgWatchSeconds(reel: ReelData, duration: number): number {
 }
 
 function defaultWatchedFullPercent(reel: ReelData): number {
-  const bucket = viewsBucket(reel.insights.views);
-  const low = FULL_LOW[bucket] ?? 7.5, high = FULL_HIGH[bucket] ?? 8;
-  return Number((low + seededFraction(reel, "full") * (high - low)).toFixed(2));
+  return Number((9 + seededFraction(reel, "full") * 5).toFixed(1));
+}
+
+function customWatchedFullPercent(reel: ReelData, base: number): number {
+  if (base === 0) return 0;
+  const low = Math.max(0, base - 3);
+  const high = Math.min(100, base + 4);
+  const value = low + seededFraction(reel, "custom-full") * (high - low);
+  return Math.min(high, Math.max(low, Number(value.toFixed(1))));
 }
 
 function customAvgWatchSeconds(reel: ReelData, duration: number, base: number): number {
@@ -114,7 +111,7 @@ function applyToReel(reel: ReelData, settings: BulkInsightSettings): ReelData {
       ...reel.insights,
       totalPlayTime,
       avgWatchTime: settings.averageWatchSeconds === undefined ? defaultAvgWatchSeconds(reel, duration) : customAvgWatchSeconds(reel, duration, settings.averageWatchSeconds),
-      watchedFull: settings.watchedFullOverridePercent ?? defaultWatchedFullPercent(reel),
+      watchedFull: settings.watchedFullOverridePercent === undefined ? defaultWatchedFullPercent(reel) : customWatchedFullPercent(reel, settings.watchedFullOverridePercent),
       trafficSources: { ...settings.trafficSources },
       audienceRegions: countryEstimates(reel, settings),
     },

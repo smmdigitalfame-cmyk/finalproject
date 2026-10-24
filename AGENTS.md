@@ -28,11 +28,13 @@ Enforce optional per-key device limits through the service-role-only, row-lockin
 
 Keep bulk estimator formulas in a client-safe pure module, open its panel from the profile menu, and persist through the existing reel save path; this preserves the individual editor and keeps future clones consistent without changing API source stats.
 Represent custom bulk average watch time as optional base seconds in saved bulk settings with deterministic reel-seeded variation; absence preserves automatic duration-based estimates and old saved settings remain compatible.
-Represent custom bulk full-watch percentages as an optional override separate from legacy defaults; absence preserves automatic estimates and saved settings remain compatible.
+Represent custom bulk full-watch percentages as an optional base separate from automatic estimates; derive bounded reel-seeded variation in the pure bulk estimator so Push and future clones agree while individual edits remain exact.
 Share country generation in a client-safe audience estimator across scraped posts and bulk Push; use deterministic decimal transfers involving every country, bounded relative to the saved base. Migrate only exact obsolete defaults on reopening, preserving edits; chunk Push work, paginate deferred previews, and guard stale/repeated writes so updates remain reproducible and responsive.
-Share deterministic reel-seeded country ordering between bulk output and video Locations, preserving source indexes for editing so ordering never changes percentage ownership.
+Use the shared country-order helper for bulk output and video Locations; sort complete country/value pairs and preserve source indexes so display reordering never changes percentage ownership or editor targets.
+Share country percentage formatting between Locations and bulk controls/previews; keep display rounding separate from stored values so saved totals and custom edits survive.
 Preserve nonempty saved audience location arrays regardless of their length, because bulk country settings must survive reopening and reload.
 All media upload surfaces share a bounded upload queue and retry only transient failures with backoff; release image resources and load failed-thumbnail video fallbacks only near the viewport to limit memory and connection pressure.
+Keep detail-player media mounted only for the active reel and immediate neighbours, use no off-screen feed preloading, and pause off-screen feed animations; this bounds mobile network/decoder work without changing the reel list or saved analytics.
 Independent builds target Vercel while managed previews retain their runtime; provider-specific trusted IP headers preserve per-client key throttling.
 Scraper fallback and media proxy call Apify directly using a server-only provider key, so independent hosting does not depend on the Lovable connector gateway.
 Media uploads require server-validated active project keys and scoped signed upload URLs, then transfer directly to storage to avoid public writes and hosting payload limits.

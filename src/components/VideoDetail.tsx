@@ -1,5 +1,5 @@
 import ExpandableCaption from "@/components/ExpandableCaption";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { ReelData, formatNumber, formatViewsDisplay } from "@/lib/mockData";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { ArrowLeft, Heart, Bookmark, MoreHorizontal, Music, Search, Play, X, Save, AlertCircle } from "lucide-react";
@@ -7,6 +7,7 @@ import { CommentIcon } from "./CommentIcon";
 import { ShareIcon } from "@/components/ShareIcon";
 import { parseInputNumber } from "@/lib/utils";
 import { playableVideoUrl } from "@/lib/videoUrls";
+import { reelMediaWindow } from "@/lib/reelMediaWindow";
 import avatar from "@/assets/avatar.jpg";
 
 interface VideoDetailProps {
@@ -49,6 +50,7 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
   const videoRefs = useRef(new Map<string, HTMLVideoElement>());
   const activeReelIdRef = useRef(reel.id);
   const manuallyPausedRef = useRef(new Set<string>());
+  const mediaIds = useMemo(() => reelMediaWindow(reels.map((item) => item.id), activeReelId), [reels, activeReelId]);
 
   const handleSave = useCallback((updated: ReelData) => {
     setLocalReel(updated);
@@ -98,6 +100,7 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
     video.muted = mutedRef.current;
     setVideoErrors((current) => current[reelId] ? { ...current, [reelId]: false } : current);
 
+    if (!video.paused) return;
     void video.play().catch((error: unknown) => {
       if (error instanceof DOMException && error.name === "AbortError") return;
       if (error instanceof DOMException && error.name === "NotAllowedError" && !mutedRef.current) {
@@ -110,6 +113,10 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
       setPlayingId((current) => current === reelId ? null : current);
     });
   }, []);
+
+  useEffect(() => {
+    if (!manuallyPausedRef.current.has(activeReelId)) playReel(activeReelId);
+  }, [activeReelId, playReel]);
 
   const togglePlay = useCallback((reelId: string) => {
     const video = videoRefs.current.get(reelId);
@@ -195,16 +202,19 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
             onClick={() => togglePlay(item.id)}
             onContextMenu={(e) => e.preventDefault()}
           >
-            {item.videoUrl ? (
+            {item.videoUrl && mediaIds.has(item.id) ? (
               <video
                 key={`${item.id}:${item.videoUrl}`}
                 ref={(node) => {
                   if (node) {
                     videoRefs.current.set(item.id, node);
-                    if (item.id === activeReelIdRef.current && !manuallyPausedRef.current.has(item.id)) {
-                      requestAnimationFrame(() => playReel(item.id));
-                    }
                   } else {
+                    const previous = videoRefs.current.get(item.id);
+                    if (previous && !previous.isConnected) {
+                      previous.pause();
+                      previous.removeAttribute("src");
+                      previous.load();
+                    }
                     videoRefs.current.delete(item.id);
                   }
                 }}
@@ -214,7 +224,7 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
                 loop
                 muted={muted}
                 playsInline
-                preload={item.id === activeReelId ? "auto" : "metadata"}
+                preload={item.id === activeReelId ? "auto" : "none"}
                 poster={item.thumbnail}
                 onPlay={() => setPlayingId(item.id)}
                 onPause={() => setPlayingId((current) => current === item.id ? null : current)}
@@ -227,7 +237,7 @@ const VideoDetail = ({ reel, reels, onBack, onInsights, onSave, suspended }: Vid
                 onError={() => { setVideoErrors((current) => ({ ...current, [item.id]: true })); setPlayingId(null); }}
               />
             ) : (
-              <img src={item.thumbnail} alt={item.title} className="h-full w-full object-cover" />
+              <img src={item.thumbnail} alt={item.title} loading="lazy" decoding="async" className="h-full w-full object-cover" />
             )}
             <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 20%, transparent 50%, rgba(0,0,0,0.85) 100%)' }} />
             {playingId !== item.id && item.videoUrl && !videoErrors[item.id] && (

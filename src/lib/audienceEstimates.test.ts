@@ -1,8 +1,17 @@
 import { describe, expect, test } from "vitest";
-import { defaultAudienceRegions, estimateAudienceRegions, refreshLegacyAudienceRegions } from "./audienceEstimates";
+import { defaultAudienceRegions, estimateAudienceRegions, refreshLegacyAudienceRegions, formatCountryPercentage } from "./audienceEstimates";
 import { orderedAudienceRegions } from "./bulkInsights";
 
 describe("natural country estimates", () => {
+  test("country percentages round to a single decimal without modifying saved values", () => {
+    expect(formatCountryPercentage(47.67)).toBe("47.7");
+    expect(formatCountryPercentage(47.6)).toBe("47.6");
+    expect(formatCountryPercentage(34.3)).toBe("34.3");
+    expect(formatCountryPercentage(78.4)).toBe("78.4");
+    expect(formatCountryPercentage(49.87)).toBe("49.9");
+    expect(formatCountryPercentage(0)).toBe("0.0");
+    expect(formatCountryPercentage(100)).toBe("100.0");
+  });
   test("every default country varies across videos with decimal percentages and a total of 100", () => {
     const results = Array.from({ length: 100 }, (_, i) => estimateAudienceRegions(`video-${i}`, 1000));
     for (const regions of results) {

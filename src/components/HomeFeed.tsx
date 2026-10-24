@@ -95,7 +95,7 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
     if (!container) return;
     const nearObserver = new IntersectionObserver(
       ([entry]) => setIsNear(entry.isIntersecting),
-      { rootMargin: "150% 0px 150% 0px" }
+      { rootMargin: "100% 0px 100% 0px" }
     );
     nearObserver.observe(container);
     return () => nearObserver.disconnect();
@@ -150,6 +150,10 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
       window.removeEventListener("blur", onPageHide);
       window.removeEventListener("focus", onVisibility);
       video.pause();
+      if (!video.isConnected) {
+        video.removeAttribute("src");
+        video.load();
+      }
     };
   }, [isNear, reel.videoUrl]);
 
@@ -217,7 +221,7 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
             loop
              muted={muted}
             playsInline
-             preload="auto"
+             preload="none"
             poster={reel.thumbnail}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
@@ -265,7 +269,7 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
         <div className="relative mb-3">
           {localStorage.getItem("user_has_story") === "1" ? (
             <div className="relative w-[52px] h-[52px]">
-              <div className="absolute inset-0 rounded-full animate-spin" style={{ animationDuration: "2.5s", background: "conic-gradient(#20d5ec, #2ee59d, #20d5ec, #1fb8f0, #20d5ec)" }} />
+              <div className={`absolute inset-0 rounded-full animate-spin ${playing ? "" : "[animation-play-state:paused]"}`} style={{ animationDuration: "2.5s", background: "conic-gradient(#20d5ec, #2ee59d, #20d5ec, #1fb8f0, #20d5ec)" }} />
               <div className="absolute inset-[3px] rounded-full overflow-hidden bg-black p-[2px]">
                 <img src={localStorage.getItem("user_avatar") || avatar} alt="" className="w-full h-full rounded-full object-cover" />
               </div>
@@ -300,7 +304,7 @@ const FeedCard = memo(({ reel }: { reel: ReelData }) => {
 
       {/* Spinning music disc */}
       <div className="absolute right-3 z-10" style={{ bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
-        <div className="w-[40px] h-[40px] rounded-full overflow-hidden border-[5px] border-[#282828] animate-spin" style={{ animationDuration: '3s' }}>
+        <div className={`w-[40px] h-[40px] rounded-full overflow-hidden border-[5px] border-[#282828] animate-spin ${playing ? "" : "[animation-play-state:paused]"}`} style={{ animationDuration: '3s' }}>
           <img src={reel.musicCover || localStorage.getItem("user_avatar") || avatar} alt="" className="w-full h-full object-cover" />
         </div>
       </div>
