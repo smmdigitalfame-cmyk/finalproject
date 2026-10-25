@@ -210,6 +210,43 @@ const scrapeViaRapid = async (username: string, count: number) => {
   return { profile, posts, error: null as string | null };
 };
 
+// Zyla's feed has no sound metadata, so best-effort attach each video's real
+// sound title and artwork from RapidAPI by video ID. Failures keep Zyla data.
+const enrichMusicViaRapid = async <T extends { posts: any[] }>(username: string, count: number, res: T): Promise<T> => {
+  const key = process.env.RAPIDAPI_KEY?.split(/[\n,]/).map((item) => item.trim()).find(Boolean);
+  if (!key || !res.posts.length) return res;
+  try {
+    const r = await fetch(
+      `https://${RAPID_HOST}/user/posts?unique_id=${encodeURIComponent(username)}&count=${count}&cursor=0`,
+      { headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": RAPID_HOST }, signal: AbortSignal.timeout(12000) },
+    );
+    if (!r.ok) return res;
+    const d = await r.json();
+    const videos: any[] = Array.isArray(d?.data) ? d.data : d?.data?.videos || d?.data?.aweme_list || d?.videos || [];
+    const byId = new Map<string, { title: string; cover: string }>();
+    for (const v of videos) {
+      const id = String(v?.video_id || v?.aweme_id || v?.id || "");
+      const m = v?.music_info || v?.music || {};
+      const cover = firstUrl(m.cover) || firstUrl(m?.cover_large?.url_list) || firstUrl(m?.cover_medium?.url_list) || firstUrl(m.cover_thumb);
+      if (id) byId.set(id, { title: m.title || "", cover });
+    }
+    return {
+      ...res,
+      posts: res.posts.map((p) => {
+        const m = byId.get(String(p.id));
+        if (!m) return p;
+        return {
+          ...p,
+          music: m.title || p.music,
+          musicCover: m.cover ? playableVideoUrl(m.cover) : p.musicCover,
+        };
+      }),
+    };
+  } catch {
+    return res;
+  }
+};
+
 // ---------- Apify fallback — async run + poll (slow but reliable) ----------
 const scrapeViaApify = async (username: string, count: number) => {
   const key = process.env.APIFY_API_KEY;
@@ -332,7 +369,8 @@ export const scrapeTikTok = createServerFn({ method: "POST" })
     let primaryFailure = "";
     let zylaFailure = "";
     try {
-      return await scrapeViaZyla(username, data.count);
+      const res = await scrapeViaZyla(username, data.count);
+      return await enrichMusicViaRapid(username, data.count, res);
     } catch (e: any) {
       zylaFailure = String(e?.message || e);
       primaryFailure = zylaFailure;
