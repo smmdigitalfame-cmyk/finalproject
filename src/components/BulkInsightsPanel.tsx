@@ -60,7 +60,8 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
         <fieldset disabled={saving} className="min-w-0">
         <section className="space-y-5 border-b border-border py-5">
           <h3 className="font-semibold">Watch metrics</h3>
-          <div>
+          <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-play-auto" className="text-sm">Total play time · Auto (0h:50m:10s – 1h:50m:30s)</label><Switch id="bulk-play-auto" checked={!draft.customTotalPlayTime} onCheckedChange={auto => update({ customTotalPlayTime: !auto })} /></div>
+          {draft.customTotalPlayTime && <div>
             <p className="mb-3 text-sm">Total play time per 1,000 views</p>
             <div className="grid grid-cols-3 gap-3">
               {([
@@ -72,18 +73,18 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
                 update({ secondsPer1000Views: draft.secondsPer1000Views + (next - part.value) * part.multiplier });
               }} /></label>)}
             </div>
-          </div>
+          </div>}
         </section>
         <section className="space-y-4 border-b border-border py-5">
           <h3 className="font-semibold">Average watch time</h3>
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-average-auto" className="text-sm">Auto</label><Switch id="bulk-average-auto" checked={draft.averageWatchSeconds === undefined} onCheckedChange={auto => update({ averageWatchSeconds: auto ? undefined : 12 })} /></div>
+            <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-average-auto" className="text-sm">Auto (5.1s – 15.1s)</label><Switch id="bulk-average-auto" checked={draft.averageWatchSeconds === undefined} onCheckedChange={auto => update({ averageWatchSeconds: auto ? undefined : 12 })} /></div>
             <label className="flex items-center justify-between gap-3 text-sm">Average watch time per video<div className="flex items-center gap-2"><Input aria-label="Average watch time seconds" className="w-24 text-right" type="number" min={0} step={0.1} disabled={draft.averageWatchSeconds === undefined} placeholder="Auto" value={draft.averageWatchSeconds ?? ""} onChange={event => update({ averageWatchSeconds: Number(event.target.value) })} /><span className="text-sm text-muted-foreground">s</span></div></label>
           </div>
         </section>
         <section className="space-y-4 border-b border-border py-5">
           <h3 className="font-semibold">Watched full video</h3>
-          <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-full-auto" className="text-sm">Auto</label><Switch id="bulk-full-auto" checked={draft.watchedFullOverridePercent === undefined} onCheckedChange={auto => update({ watchedFullOverridePercent: auto ? undefined : draft.watchedFullPercent })} /></div>
+          <div className="flex items-center justify-between gap-3"><label htmlFor="bulk-full-auto" className="text-sm">Auto (5.10% – 15.10%)</label><Switch id="bulk-full-auto" checked={draft.watchedFullOverridePercent === undefined} onCheckedChange={auto => update({ watchedFullOverridePercent: auto ? undefined : draft.watchedFullPercent })} /></div>
           {draft.watchedFullOverridePercent !== undefined && <PercentControl label="Watched full video percentage" value={draft.watchedFullOverridePercent} onChange={value => update({ watchedFullOverridePercent: value })} />}
           {draft.watchedFullOverridePercent === undefined && <label className="flex items-center justify-between gap-3 text-sm">Watched full video percentage<div className="flex items-center gap-2"><Input aria-label="Watched full video percentage" className="w-20 text-right" type="number" disabled placeholder="Auto" value="" /><span className="text-muted-foreground text-sm">%</span></div></label>}
         </section>
@@ -94,8 +95,11 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
           </div>
         </section>
         <section className="space-y-3 border-b border-border py-5">
-          <div className="flex justify-between gap-3"><h3 className="font-semibold">Audience locations</h3><span className={`text-sm ${Math.abs(countryTotal - 100) < 0.01 ? "text-tiktok-success" : "text-destructive"}`}>{formatCountryPercentage(countryTotal)} / 100%</span></div>
-          <label className="flex items-center justify-between gap-3 text-sm">Country variation (± points)<Input aria-label="Country variation" className="w-20" type="number" min={0} max={4} step={0.1} value={draft.countryVariation ?? 4} onChange={event => update({ countryVariation: Number(event.target.value) })} /></label>
+          <div className="flex justify-between gap-3"><h3 className="font-semibold">Audience locations</h3>{draft.customCountries && <span className={`text-sm ${Math.abs(countryTotal - 100) < 0.01 ? "text-tiktok-success" : "text-destructive"}`}>{formatCountryPercentage(countryTotal)} / 100%</span>}</div>
+<div className="flex items-center justify-between gap-3"><label htmlFor="bulk-country-auto" className="text-sm">Auto (US / UK top, random countries)</label><Switch id="bulk-country-auto" checked={!draft.customCountries} onCheckedChange={auto => update({ customCountries: !auto })} /></div>
+          {!draft.customCountries && <label className="flex items-center justify-between gap-3 text-sm">Top country minimum<div className="flex items-center gap-2"><Input aria-label="Top country minimum percentage" className="w-20 text-right" type="number" min={30} max={90} step={0.1} value={draft.topCountryMinPercent ?? 30} onChange={event => update({ topCountryMinPercent: Number(event.target.value) })} /><span className="text-sm text-muted-foreground">%</span></div></label>}
+          {draft.customCountries && <>
+                    <label className="flex items-center justify-between gap-3 text-sm">Country variation (± points)<Input aria-label="Country variation" className="w-20" type="number" min={0} max={4} step={0.1} value={draft.countryVariation ?? 4} onChange={event => update({ countryVariation: Number(event.target.value) })} /></label>
           {draft.audienceRegions.map((region, index) => <div key={index} className="flex items-center gap-2">
             <Input aria-label={`Country ${index + 1}`} className="min-w-0 flex-1" value={region.name} placeholder="Country" onChange={event => update({ audienceRegions: draft.audienceRegions.map((item, i) => i === index ? { ...item, name: event.target.value } : item) })} />
             <Input aria-label={`Country ${index + 1} percentage`} className="w-20" type="number" min={0} max={100} step={0.1} value={formatCountryPercentage(region.percentage)} onChange={event => update({ audienceRegions: draft.audienceRegions.map((item, i) => i === index ? { ...item, percentage: Number(event.target.value) } : item) })} />
@@ -103,6 +107,7 @@ export default function BulkInsightsPanel({ reels, onClose, onPush }: {
             <Button variant="ghost" size="icon" aria-label={`Remove country ${index + 1}`} title="Remove country" onClick={() => update({ audienceRegions: draft.audienceRegions.filter((_, i) => i !== index) })}><Trash2 /></Button>
           </div>)}
           <Button variant="outline" size="sm" onClick={() => update({ audienceRegions: [...draft.audienceRegions, { name: "", percentage: 0 }] })}><Plus />Add country</Button>
+          </>}
         </section>
         <section className="py-5">
           <h3 className="mb-3 font-semibold">All videos · estimated values</h3>

@@ -1,6 +1,7 @@
 import type { ReelData, ReelInsights } from "./mockData";
 import { parseDuration } from "./utils";
 import { defaultAudienceRegions, estimateAudienceRegions } from "./audienceEstimates";
+import { organicAudienceRegions, organicAvgWatchTime, organicTotalPlayTime, organicWatchedFull, refreshLegacyAgeGroups, refreshLegacyViewsByDay, TOP_COUNTRY_MIN } from "./organicInsights";
 
 export interface BulkInsightSettings {
   enabled: boolean;
@@ -12,6 +13,12 @@ export interface BulkInsightSettings {
   trafficSources: ReelInsights["trafficSources"];
   audienceRegions: ReelInsights["audienceRegions"];
   countryVariation?: number;
+  /** true = use secondsPer1000Views; absent/false = automatic 0h50m10s-1h50m30s per video. */
+  customTotalPlayTime?: boolean;
+  /** true = vary the saved country list; absent/false = automatic US/UK-led organic countries. */
+  customCountries?: boolean;
+  /** Minimum leader percentage for automatic countries (30-90). */
+  topCountryMinPercent?: number;
 }
 
 export const BULK_SETTINGS_KEY = "bulk_insight_settings";
@@ -34,6 +41,7 @@ export function validateBulkSettings(input: unknown): string | null {
   if (settings.averageWatchSeconds !== undefined && (!Number.isFinite(settings.averageWatchSeconds) || settings.averageWatchSeconds < 0)) return "Enter a valid average watch time in seconds.";
   if (settings.watchedFullOverridePercent !== undefined && !validPercent(settings.watchedFullOverridePercent)) return "Watched full video must be between 0 and 100%.";
   if ((settings.averageWatchPercent !== undefined && !validPercent(settings.averageWatchPercent)) || (settings.watchedFullPercent !== undefined && !validPercent(settings.watchedFullPercent))) return "Watch percentages must be between 0 and 100.";
+  if (settings.topCountryMinPercent !== undefined && (!Number.isFinite(settings.topCountryMinPercent) || settings.topCountryMinPercent < 30 || settings.topCountryMinPercent > 90)) return "Top country must be between 30 and 90%.";
   if (settings.countryVariation !== undefined && (!Number.isFinite(settings.countryVariation) || settings.countryVariation < 0 || settings.countryVariation > 4)) return "Country variation must be between 0 and 4 percentage points.";
   if (!settings.trafficSources || typeof settings.trafficSources !== "object") return "Invalid traffic sources.";
   const traffic = Object.values(settings.trafficSources);
@@ -60,27 +68,13 @@ export function orderedAudienceRegions(regions: ReelInsights["audienceRegions"],
 
 // Decimal transfers preserve the customer's total and each country's variation bounds.
 function countryEstimates(reel: ReelData, settings: BulkInsightSettings) {
+  if (!settings.customCountries) return organicAudienceRegions(reel.id, settings.topCountryMinPercent ?? TOP_COUNTRY_MIN);
   const regions = estimateAudienceRegions(reel.id, reel.insights.views, settings.audienceRegions, settings.countryVariation ?? 4);
   return orderedAudienceRegions(regions, reel.id).map(({ region }) => region);
 }
 
-// Default average watch time is a fixed random-looking band per video
-// (5.8-7.4s), deterministic per reel so repeat runs keep the same value.
-const AVG_MIN = 5.8;
-const AVG_MAX = 7.4;
-
 function seededFraction(reel: ReelData, key: string): number {
   return hashSeed(`${reel.id}:${reel.insights.views}:${key}`) / 4294967295;
-}
-
-function defaultAvgWatchSeconds(reel: ReelData, duration: number): number {
-  if (!Number.isFinite(duration) || duration <= 0) return 0;
-  const value = AVG_MIN + seededFraction(reel, "avg") * (AVG_MAX - AVG_MIN);
-  return Math.min(duration, Math.round(value * 10) / 10);
-}
-
-function defaultWatchedFullPercent(reel: ReelData): number {
-  return Number((9 + seededFraction(reel, "full") * 5).toFixed(1));
 }
 
 function customWatchedFullPercent(reel: ReelData, base: number): number {
@@ -103,15 +97,17 @@ function customAvgWatchSeconds(reel: ReelData, duration: number, base: number): 
 function applyToReel(reel: ReelData, settings: BulkInsightSettings): ReelData {
   const views = reel.insights.views;
   const duration = parseDuration(reel.duration);
-  const totalPlayTime = Math.round(views / 1000 * settings.secondsPer1000Views);
+  const totalPlayTime = settings.customTotalPlayTime ? Math.round(views / 1000 * settings.secondsPer1000Views) : organicTotalPlayTime(reel.id);
   if (!Number.isSafeInteger(views) || views < 0 || !Number.isFinite(duration) || duration < 0 || !Number.isSafeInteger(totalPlayTime)) throw new Error("A video has invalid views or duration. Fetch it again before applying settings.");
   return {
     ...reel,
     insights: {
       ...reel.insights,
       totalPlayTime,
-      avgWatchTime: settings.averageWatchSeconds === undefined ? defaultAvgWatchSeconds(reel, duration) : customAvgWatchSeconds(reel, duration, settings.averageWatchSeconds),
-      watchedFull: settings.watchedFullOverridePercent === undefined ? defaultWatchedFullPercent(reel) : customWatchedFullPercent(reel, settings.watchedFullOverridePercent),
+      avgWatchTime: settings.averageWatchSeconds === undefined ? organicAvgWatchTime(reel.id) : customAvgWatchSeconds(reel, duration, settings.averageWatchSeconds),
+      watchedFull: settings.watchedFullOverridePercent === undefined ? organicWatchedFull(reel.id) : customWatchedFullPercent(reel, settings.watchedFullOverridePercent),
+      viewsByDay: refreshLegacyViewsByDay(reel.id, views, reel.insights.viewsByDay),
+      ageGroups: refreshLegacyAgeGroups(reel.id, reel.insights.ageGroups),
       trafficSources: { ...settings.trafficSources },
       audienceRegions: countryEstimates(reel, settings),
     },
@@ -154,13 +150,24 @@ export function persistBulkResult(storage: Pick<Storage, "getItem" | "setItem" |
   }
 }
 
+const sameRegions = (a: ReelInsights["audienceRegions"], b: ReelInsights["audienceRegions"]) =>
+  a.length === b.length && a.every((region, i) => region.name === b[i]?.name && region.percentage === b[i]?.percentage);
+
+// Settings saved before the automatic modes existed keep any customer edits as custom.
+export function migrateBulkSettings(settings: BulkInsightSettings): BulkInsightSettings {
+  const next = { ...settings };
+  if (next.customTotalPlayTime === undefined && next.secondsPer1000Views !== defaultBulkSettings.secondsPer1000Views) next.customTotalPlayTime = true;
+  if (next.customCountries === undefined && (!sameRegions(next.audienceRegions, defaultAudienceRegions) || (next.countryVariation ?? 4) !== 4)) next.customCountries = true;
+  return next;
+}
+
 export function loadBulkSettings(): BulkInsightSettings {
   try {
     const saved = localStorage.getItem(BULK_SETTINGS_KEY);
     if (!saved) return structuredClone(defaultBulkSettings);
     const parsed = JSON.parse(saved) as BulkInsightSettings;
     if (typeof parsed.enabled !== "boolean" || validateBulkSettings(parsed)) return structuredClone(defaultBulkSettings);
-    return parsed;
+    return migrateBulkSettings(parsed);
   } catch {
     return structuredClone(defaultBulkSettings);
   }

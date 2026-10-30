@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import { applyBulkInsights, applyBulkInsightsBatched, persistBulkResult, loadBulkSettings, BULK_SETTINGS_KEY, defaultBulkSettings, validateBulkSettings, orderedAudienceRegions } from "./bulkInsights";
 import type { ReelData } from "./mockData";
 
-const settings = { ...defaultBulkSettings, enabled: true };
+// Most tests exercise the customer-defined (custom) modes; automatic modes are tested separately.
+const settings = { ...defaultBulkSettings, enabled: true, customTotalPlayTime: true, customCountries: true };
+const autoSettings = { ...defaultBulkSettings, enabled: true };
 const reel = (views: number, duration = "0:30"): ReelData => ({
   id: String(views), title: "Video", description: "", tags: [], thumbnail: "", duration,
   createdAt: "2026-10-18", music: "sound", username: "creator",
@@ -127,28 +129,49 @@ describe("bulk video estimator", () => {
   test("hours minutes and seconds are preserved", () => {
     expect(applyBulkInsights([reel(1000)], { ...settings, secondsPer1000Views: 3662 })[0]?.insights.totalPlayTime).toBe(3662);
   });
-  test("average watch time stays random between 5.8 and 7.4 seconds per video", () => {
-    const values = applyBulkInsights(Array.from({ length: 100 }, (_, i) => reel(1000 + i, "0:30")), settings).map(video => video.insights.avgWatchTime);
-    expect(new Set(values).size).toBeGreaterThan(10);
-    expect(values.some(value => !Number.isInteger(value))).toBe(true);
+  test("automatic average watch time is random between 5.1 and 15.1 seconds per video", () => {
+    const values = applyBulkInsights(Array.from({ length: 100 }, (_, i) => reel(1000 + i, "0:30")), autoSettings).map(video => video.insights.avgWatchTime);
+    expect(new Set(values).size).toBeGreaterThan(40);
     for (const value of values) {
-      expect(value).toBeGreaterThanOrEqual(5.8);
-      expect(value).toBeLessThanOrEqual(7.4);
+      expect(value).toBeGreaterThanOrEqual(5.1);
+      expect(value).toBeLessThanOrEqual(15.1);
     }
   });
-  test("average watch time never exceeds the video's own length", () => {
-    const value = applyBulkInsights([reel(1000, "0:04")], settings)[0]?.insights.avgWatchTime ?? 0;
-    expect(value).toBeGreaterThan(0);
-    expect(value).toBeLessThanOrEqual(4);
-  });
-  test("automatic full watch varies between 9 and 14 percent with one decimal", () => {
-    const values = applyBulkInsights(Array.from({ length: 100 }, (_, i) => reel(1000 + i)), settings).map(video => video.insights.watchedFull);
-    expect(new Set(values).size).toBeGreaterThan(20);
+  test("automatic full watch is random between 5.10 and 15.10 percent", () => {
+    const values = applyBulkInsights(Array.from({ length: 100 }, (_, i) => reel(1000 + i)), autoSettings).map(video => video.insights.watchedFull);
+    expect(new Set(values).size).toBeGreaterThan(40);
     for (const value of values) {
-      expect(value).toBeGreaterThanOrEqual(9);
-      expect(value).toBeLessThanOrEqual(14);
-      expect(value).toBe(Number(value.toFixed(1)));
+      expect(value).toBeGreaterThanOrEqual(5.1);
+      expect(value).toBeLessThanOrEqual(15.1);
+      expect(value).toBe(Number(value.toFixed(2)));
     }
+  });
+  test("automatic total play time is random between 0h50m10s and 1h50m30s", () => {
+    const values = applyBulkInsights(Array.from({ length: 100 }, (_, i) => reel(1000 + i)), autoSettings).map(video => video.insights.totalPlayTime);
+    expect(new Set(values).size).toBeGreaterThan(80);
+    for (const value of values) {
+      expect(value).toBeGreaterThanOrEqual(3010);
+      expect(value).toBeLessThanOrEqual(6630);
+    }
+  });
+  test("automatic countries lead with US or UK above the chosen minimum", () => {
+    const output = applyBulkInsights(Array.from({ length: 50 }, (_, i) => reel(1000 + i)), { ...autoSettings, topCountryMinPercent: 40 });
+    for (const video of output) {
+      const regions = video.insights.audienceRegions;
+      expect(["United States", "United Kingdom"]).toContain(regions[0]?.name);
+      expect(regions[0]?.percentage).toBeGreaterThan(40);
+    }
+    expect(validateBulkSettings({ ...autoSettings, topCountryMinPercent: 29 })).not.toBeNull();
+  });
+  test("old saved settings keep custom edits and adopt automatic modes otherwise", () => {
+    const store = new Map<string, string>();
+    globalThis.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) } as Storage;
+    store.set(BULK_SETTINGS_KEY, JSON.stringify({ ...defaultBulkSettings, enabled: true }));
+    expect(loadBulkSettings().customTotalPlayTime).toBeUndefined();
+    expect(loadBulkSettings().customCountries).toBeUndefined();
+    store.set(BULK_SETTINGS_KEY, JSON.stringify({ ...defaultBulkSettings, enabled: true, secondsPer1000Views: 1800, audienceRegions: [{ name: "India", percentage: 100 }] }));
+    expect(loadBulkSettings().customTotalPlayTime).toBe(true);
+    expect(loadBulkSettings().customCountries).toBe(true);
   });
   test("country and traffic settings apply without sharing mutable objects", () => {
     const output = applyBulkInsights([reel(1000), reel(2000)], settings);

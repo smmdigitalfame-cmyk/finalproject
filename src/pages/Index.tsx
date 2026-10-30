@@ -7,6 +7,7 @@ import BottomNav from "@/components/BottomNav";
 import { applyBulkInsights, applyBulkInsightsBatched, persistBulkResult, loadBulkSettings, type BulkInsightSettings } from "@/lib/bulkInsights";
 import { toast } from "sonner";
 import { refreshLegacyAudienceRegions } from "@/lib/audienceEstimates";
+import { refreshLegacyAgeGroups, refreshLegacyViewsByDay } from "@/lib/organicInsights";
 
 
 // Code-split heavy overlays/panels — they only mount when needed
@@ -48,7 +49,9 @@ const Index = () => {
       return rs.map((raw, index) => {
         const r = normalizeReelData(raw, index);
         const regions = refreshLegacyAudienceRegions(r.id, r.insights.views, r.insights.audienceRegions);
-        return { ...r, insights: { ...r.insights, audienceRegions: regions } };
+        return { ...r, insights: { ...r.insights, audienceRegions: regions,
+          viewsByDay: refreshLegacyViewsByDay(r.id, r.insights.views, r.insights.viewsByDay),
+          ageGroups: refreshLegacyAgeGroups(r.id, r.insights.ageGroups) } };
       });
     };
     if (typeof window === "undefined") return generateMockReels();

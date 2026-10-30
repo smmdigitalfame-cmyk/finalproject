@@ -1,8 +1,6 @@
 import type { ReelData } from "./mockData";
 import { scrapeTikTok } from "./tiktok.functions";
-import { parseDuration } from "./utils";
-import { estimateAudienceRegions } from "./audienceEstimates";
-import { orderedAudienceRegions } from "./bulkInsights";
+import { organicAgeGroups, organicAudienceRegions, organicAvgWatchTime, organicTotalPlayTime, organicViewsByDay, organicWatchedFull } from "./organicInsights";
 
 export interface TikTokApiPost {
   id: string;
@@ -35,12 +33,6 @@ export const apiPostToReel = (p: TikTokApiPost, username: string): ReelData => {
   const comments = p.stats.comments || 0;
   const shares = p.stats.shares || 0;
   const saves = p.stats.saves || 0;
-  // Average watch time is a random-looking value between 5.8 and 7.4 seconds,
-  // seeded by the video id so repeat clones keep the same value.
-  const durationSec = parseDuration(p.duration);
-  const seed = p.id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const watchSeconds = 5.8 + ((seed % 100) / 100) * 1.6;
-  const avgWatchTime = views > 0 && durationSec > 0 ? Math.min(durationSec, Math.round(watchSeconds * 10) / 10) : 0;
   return {
     id: p.id,
     title: p.title || p.description || "",
@@ -59,31 +51,17 @@ export const apiPostToReel = (p: TikTokApiPost, username: string): ReelData => {
       comments,
       shares,
       saves,
-      avgWatchTime,
-      totalPlayTime: Math.floor(views * 0.005),
+      avgWatchTime: organicAvgWatchTime(p.id),
+      totalPlayTime: organicTotalPlayTime(p.id),
       reachedAudience: Math.floor(views * 0.8),
       profileVisits: Math.floor(views * 0.03),
       followsFromPost: Math.floor(views * 0.003),
-      watchedFull: 70,
+      watchedFull: organicWatchedFull(p.id),
       trafficSources: { forYouPage: 70, following: 15, profile: 7, search: 4, sounds: 2, hashtags: 2 },
-      audienceRegions: orderedAudienceRegions(estimateAudienceRegions(p.id, views), p.id).map(({ region }) => region),
-      viewsByDay: [
-        { day: "Mon", views: Math.floor(views * 0.15) },
-        { day: "Tue", views: Math.floor(views * 0.2) },
-        { day: "Wed", views: Math.floor(views * 0.18) },
-        { day: "Thu", views: Math.floor(views * 0.15) },
-        { day: "Fri", views: Math.floor(views * 0.12) },
-        { day: "Sat", views: Math.floor(views * 0.1) },
-        { day: "Sun", views: Math.floor(views * 0.1) },
-      ],
+      audienceRegions: organicAudienceRegions(p.id),
+      viewsByDay: organicViewsByDay(p.id, views),
       genderSplit: { male: 40, female: 55, other: 5 },
-      ageGroups: [
-        { range: "13-17", percentage: 15 },
-        { range: "18-24", percentage: 45 },
-        { range: "25-34", percentage: 25 },
-        { range: "35-44", percentage: 10 },
-        { range: "45+", percentage: 5 },
-      ],
+      ageGroups: organicAgeGroups(p.id),
     },
   };
 };

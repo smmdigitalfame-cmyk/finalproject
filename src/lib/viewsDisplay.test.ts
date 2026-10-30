@@ -34,18 +34,21 @@ describe("bulk watch metrics tables", () => {
   const reels = [reel("a", 1074), reel("b", 1074), reel("c", 1957)];
   const out = applyBulkInsights(reels, settings);
 
-  it("keeps total play time formula unchanged", () => {
-    expect(out[0]!.insights.totalPlayTime).toBe(Math.round(1074 / 1000 * settings.secondsPer1000Views));
+  it("custom total play time keeps the per-1,000-views formula", () => {
+    const custom = applyBulkInsights(reels, { ...settings, customTotalPlayTime: true });
+    expect(custom[0]!.insights.totalPlayTime).toBe(Math.round(1074 / 1000 * settings.secondsPer1000Views));
   });
-  it("average watch time stays random between 5.8 and 7.4 seconds", () => {
-    for (const r of out.slice(0, 2)) {
-      expect(r.insights.avgWatchTime).toBeGreaterThanOrEqual(5.8);
-      expect(r.insights.avgWatchTime).toBeLessThanOrEqual(7.4);
+  it("automatic average watch time stays between 5.1 and 15.1 seconds", () => {
+    for (const r of out) {
+      expect(r.insights.avgWatchTime).toBeGreaterThanOrEqual(5.1);
+      expect(r.insights.avgWatchTime).toBeLessThanOrEqual(15.1);
     }
   });
-  it("watched full follows the views bucket (1950-2000 → 14.10-14.91%)", () => {
-    expect(out[2]!.insights.watchedFull).toBeGreaterThanOrEqual(14.1);
-    expect(out[2]!.insights.watchedFull).toBeLessThanOrEqual(14.91);
+  it("automatic watched full stays between 5.10 and 15.10%", () => {
+    for (const r of out) {
+      expect(r.insights.watchedFull).toBeGreaterThanOrEqual(5.1);
+      expect(r.insights.watchedFull).toBeLessThanOrEqual(15.1);
+    }
   });
   it("is deterministic per reel", () => {
     const again = applyBulkInsights(reels, settings);
