@@ -1,4 +1,4 @@
-﻿import { createServerFn } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { playableVideoUrl } from "@/lib/videoUrls";
 
@@ -247,44 +247,66 @@ const enrichMusicViaRapid = async <T extends { posts: any[] }>(username: string,
   }
 };
 
-// ---------- Apify — sync run, stays within Vercel function timeout ----------
+// ---------- Apify fallback — async run + poll (slow but reliable) ----------
 const scrapeViaApify = async (username: string, count: number) => {
   const key = process.env.APIFY_API_KEY;
-  if (!key) throw new Error("Scraping key is not configured");
+  if (!key) throw new Error("Scraping fallback key is not configured");
   const headers = {
     Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
   };
 
-  // Use sync endpoint: actor runs and returns dataset items in one request.
-  // Limit to 10 results and disable downloads to stay well under 25s.
-  const runRes = await fetch(
-    `${APIFY_URL}/acts/${ACTOR_ID}/run-sync-get-dataset-items?timeout=22&memory=256`,
-    {
-      method: "POST",
-      headers,
-      signal: AbortSignal.timeout(25000),
-      body: JSON.stringify({
-        profiles: [username],
-        resultsPerPage: Math.min(count, 10),
-        shouldDownloadVideos: false,
-        shouldDownloadCovers: false,
-      }),
-    },
-  );
-
-  if (!runRes.ok) {
-    const t = await runRes.text();
-    console.error(`Apify sync run failed [${runRes.status}]: ${t.slice(0, 200)}`);
+  // Start an async Actor run — sync mode times out (502) when downloading many videos.
+  const startRes = await fetch(`${APIFY_URL}/acts/${ACTOR_ID}/runs`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      profiles: [username],
+      resultsPerPage: count,
+      shouldDownloadVideos: true,
+      shouldDownloadCovers: true,
+    }),
+  });
+  if (!startRes.ok) {
+    const t = await startRes.text();
+    console.error(`Apify run start failed [${startRes.status}]`);
     return {
-      error: runRes.status === 429 ? "Rate limited, try again shortly." : "TikTok is temporarily unavailable. Please retry.",
+      error: startRes.status === 429 ? "Rate limited, try again shortly." : "TikTok is temporarily unavailable. Please retry.",
       profile: emptyProfile(username),
       posts: [],
     };
   }
+  const runData = (await startRes.json())?.data;
+  const runId: string | undefined = runData?.id;
+  const datasetId: string | undefined = runData?.defaultDatasetId;
+  if (!runId || !datasetId) {
+    return { error: "Scraper could not be started. Please retry.", profile: emptyProfile(username), posts: [] };
+  }
 
-  const items: any[] = await runRes.json().catch(() => []);
-  const valid = Array.isArray(items) ? items.filter((i) => i?.authorMeta && i?.id) : [];
+  // Poll run status until terminal (slow interval; stop on 4xx or failure).
+  let status = runData.status as string;
+  for (let i = 0; i < 28 && !["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status); i++) {
+    await sleep(3000);
+    const stRes = await fetch(`${APIFY_URL}/actor-runs/${runId}`, { headers });
+    if (!stRes.ok) {
+      if (stRes.status >= 400 && stRes.status < 500) break; // won't recover
+      continue; // transient 5xx — keep polling
+    }
+    status = (await stRes.json())?.data?.status || status;
+  }
+  if (["FAILED", "ABORTED", "TIMED-OUT"].includes(status)) {
+    return { error: "Scraping failed. Please retry.", profile: emptyProfile(username), posts: [] };
+  }
+
+  // Read whatever the dataset has (full set if SUCCEEDED, partial if still running).
+  const itemsRes = await fetch(`${APIFY_URL}/datasets/${datasetId}/items?limit=${count}`, { headers });
+  if (!itemsRes.ok) {
+    const t = await itemsRes.text();
+    console.error(`Apify dataset read failed [${itemsRes.status}]`);
+    return { error: "TikTok is temporarily unavailable. Please retry.", profile: emptyProfile(username), posts: [] };
+  }
+  const items: any[] = await itemsRes.json();
+  const valid = items.filter((i) => i?.authorMeta && i?.id);
   if (!valid.length) {
     return { error: "User not found. Double-check the username.", profile: emptyProfile(username), posts: [] };
   }
@@ -343,38 +365,50 @@ export const scrapeTikTok = createServerFn({ method: "POST" })
       return { error: "Enter a valid TikTok username.", profile: emptyProfile(""), posts: [] };
     }
 
-    // Primary: Apify (Zyla subscription ended — Apify is now the main scraper).
-    // Zyla & RapidAPI kept as opportunistic fast paths if keys become available.
+    // Primary: Zyla Labs — seconds instead of minutes, direct playable URLs.
+    let primaryFailure = "";
     let zylaFailure = "";
-    let rapidFailure = "";
-
-    // Try Zyla first (fast, if key exists)
-    if (process.env.ZYLA_API_KEY) {
-      try {
-        const res = await scrapeViaZyla(username, data.count);
-        return await enrichMusicViaRapid(username, data.count, res);
-      } catch (e: any) {
-        zylaFailure = String(e?.message || e);
-        console.error(`Zyla scrape failed: ${zylaFailure}`);
-      }
-    }
-
-    // Try RapidAPI (fast, if key exists)
-    if (process.env.RAPIDAPI_KEY) {
-      try {
-        return await scrapeViaRapid(username, data.count);
-      } catch (e: any) {
-        rapidFailure = String(e?.message || e);
-        console.error(`RapidAPI scrape failed: ${rapidFailure}`);
-      }
-    }
-
-    // Apify — primary reliable scraper
     try {
-      return await scrapeViaApify(username, data.count);
+      const res = await scrapeViaZyla(username, data.count);
+      return await enrichMusicViaRapid(username, data.count, res);
+    } catch (e: any) {
+      zylaFailure = String(e?.message || e);
+      primaryFailure = zylaFailure;
+      console.error(`Zyla scrape failed, falling back to RapidAPI: ${zylaFailure}`);
+    }
+
+    // Fallback 1: RapidAPI
+    try {
+      return await scrapeViaRapid(username, data.count);
+    } catch (e: any) {
+      primaryFailure = String(e?.message || e);
+      console.error(`RapidAPI scrape failed, falling back to Apify: ${primaryFailure}`);
+    }
+
+    // Both fast sources answered and agree the account does not exist.
+    const notFound = (f: string) => f === "user-not-found";
+    const userMissing = notFound(zylaFailure) && notFound(primaryFailure);
+
+    // Fallback: Apify
+    try {
+      const res = await scrapeViaApify(username, data.count);
+      if (res.error && userMissing) {
+        return { error: "User not found. Double-check the username.", profile: emptyProfile(username), posts: [] };
+      }
+      return res;
     } catch (e: any) {
       const apifyFailure = String(e?.message || e);
       console.error(`Apify scrape failed: ${apifyFailure}`);
+      if (userMissing) {
+        return { error: "User not found. Double-check the username.", profile: emptyProfile(username), posts: [] };
+      }
+      if (primaryFailure.includes("429") && apifyFailure === "Scraping key is not configured") {
+        return {
+          error: "TikTok scraping limit reached. Please retry later.",
+          profile: emptyProfile(username),
+          posts: [],
+        };
+      }
       return { error: "TikTok is temporarily unavailable. Please retry.", profile: emptyProfile(username), posts: [] };
     }
   });
