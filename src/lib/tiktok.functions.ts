@@ -263,8 +263,8 @@ const scrapeViaApify = async (username: string, count: number) => {
     body: JSON.stringify({
       profiles: [username],
       resultsPerPage: Math.min(count, 12),
-      shouldDownloadVideos: false,
-      shouldDownloadCovers: false,
+      shouldDownloadVideos: true,
+      shouldDownloadCovers: true,
     }),
   });
   if (!startRes.ok) {
