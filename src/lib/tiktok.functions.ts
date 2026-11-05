@@ -318,7 +318,7 @@ const scrapeViaApify = async (username: string, count: number) => {
     followers: a.fans ?? 0,
     following: a.following ?? 0,
     verified: !!a.verified,
-    bioLink: a.bioLink || "",
+    bioLink: (typeof a.bioLink === "string" ? a.bioLink : (a.bioLink && typeof (a.bioLink as any).link === "string" ? (a.bioLink as any).link : "")) || "",
     region: a.region || "",
     avatar: playableVideoUrl(a.avatar || ""),
     hasStory: Number(a.UserStoryStatus ?? a.userStoryStatus ?? 0) > 0,

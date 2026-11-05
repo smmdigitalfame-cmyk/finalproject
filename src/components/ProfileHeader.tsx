@@ -65,7 +65,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
     if (saved) {
       const parsed = JSON.parse(saved) as ProfileData;
       // Drop the old built-in fixed store link from previously saved profiles
-      if (parsed.bioLink?.replace(/^https?:\/\//i, "").replace(/\/$/, "") === "extipsinghtpro.store") delete parsed.bioLink;
+      if (typeof parsed.bioLink === "string" && parsed.bioLink.replace(/^https?:\/\//i, "").replace(/\/$/, "") === "extipsinghtpro.store") delete parsed.bioLink; else if (typeof parsed.bioLink !== "string") delete parsed.bioLink;
       // Replace the old built-in sample profile with the new default one
       if (parsed.username === "officialzyrozo") return { ...parsed, ...defaults };
       return parsed;
@@ -124,7 +124,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
         followers: String(result.followers ?? prev.followers),
         following: String(result.following ?? prev.following),
         verified: typeof result.verified === "boolean" ? result.verified : prev.verified,
-        bioLink: result.bioLink || prev.bioLink,
+        bioLink: (typeof result.bioLink === "string" ? result.bioLink : (result.bioLink && typeof (result.bioLink as any).link === "string" ? (result.bioLink as any).link : "")) || prev.bioLink,
         region: result.region || prev.region,
       });
       setEditForm(merged);
@@ -325,7 +325,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
       {/* Bio / Links / TikTok Studio */}
       <div className="flex flex-col items-center text-center mt-1.5 px-8 mb-1">
         {profile.bio && <p className="text-foreground text-[14px] whitespace-pre-line font-medium leading-[1.3] mb-2">{profile.bio}</p>}
-        {profile.bioLink && (
+        {typeof profile.bioLink === "string" && profile.bioLink && (
           <a
             href={/^https?:\/\//i.test(profile.bioLink) ? profile.bioLink : `https://${profile.bioLink}`}
             target="_blank"
