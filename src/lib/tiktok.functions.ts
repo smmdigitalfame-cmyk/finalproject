@@ -141,6 +141,63 @@ const scrapeViaZyla = async (username: string, count: number) => {
 };
 
 // ---------- RapidAPI (tiktok-scraper7) — fallback: fast, direct video URLs ----------
+const rapidVideoList = (d: any): any[] =>
+  Array.isArray(d?.data) ? d.data : d?.data?.videos || d?.data?.aweme_list || d?.videos || d?.aweme_list || [];
+
+const mapRapidVideos = (videos: any[]) =>
+  videos
+    .map((v) => ({
+      ...v,
+      aweme_id: v?.video_id || v?.aweme_id || v?.id,
+      resolvedPlay: firstUrl(v?.play) || firstUrl(v?.wmplay) || firstUrl(v?.video?.play_addr?.url_list) || firstUrl(v?.video?.download_addr?.url_list),
+    }))
+    .filter((v) => v?.aweme_id && v?.resolvedPlay)
+    .map((v) => ({
+      id: String(v.aweme_id),
+      title: v.title || "",
+      description: v.title || "",
+      thumbnail: playableVideoUrl(firstUrl(v.cover) || firstUrl(v.origin_cover) || firstUrl(v?.video?.cover?.url_list)),
+      videoUrl: playableVideoUrl(v.resolvedPlay),
+      duration: formatDuration(v.duration ?? v?.video?.duration ?? 0),
+      createdAt: getPostedDate(v.aweme_id, v.create_time),
+      music: v.music_info?.title || v.music?.title || "original sound",
+      musicCover: playableVideoUrl(firstUrl(v.music_info?.cover) || firstUrl(v?.music?.cover_large?.url_list) || firstUrl(v?.music?.cover_medium?.url_list)),
+      tags: extractTags(v.title || ""),
+      stats: {
+        views: v.play_count || 0,
+        likes: v.digg_count || 0,
+        comments: v.comment_count || 0,
+        shares: v.share_count || 0,
+        saves: v.collect_count || 0,
+        downloads: v.download_count || 0,
+      },
+    }));
+
+// RapidAPI pages are capped per request; follow the cursor until `count`.
+const fetchRapidPosts = async (username: string, count: number, headers: Record<string, string>, timeoutMs: number) => {
+  const out: ReturnType<typeof mapRapidVideos> = [];
+  const seen = new Set<string>();
+  let cursor = "0";
+  for (let page = 0; page < 4 && out.length < count; page++) {
+    const r = await fetch(
+      `https://${RAPID_HOST}/user/posts?unique_id=${encodeURIComponent(username)}&count=${count}&cursor=${cursor}`,
+      { headers, signal: AbortSignal.timeout(timeoutMs) },
+    );
+    if (!r.ok) {
+      if (page === 0) throw new Error(`posts-${r.status}`);
+      break;
+    }
+    const d = await r.json();
+    for (const p of mapRapidVideos(rapidVideoList(d))) {
+      if (!seen.has(p.id)) { seen.add(p.id); out.push(p); }
+    }
+    const next = d?.data?.cursor;
+    if (!d?.data?.hasMore || !next || String(next) === cursor) break;
+    cursor = String(next);
+  }
+  return out.slice(0, count);
+};
+
 const scrapeViaRapid = async (username: string, count: number) => {
   const key = process.env.RAPIDAPI_KEY?.split(/[\n,]/).map((item) => item.trim()).find(Boolean);
   if (!key) throw new Error("no-key");
@@ -157,23 +214,8 @@ const scrapeViaRapid = async (username: string, count: number) => {
   if (!user || !resolvedUsername) throw new Error("user-not-found");
   const stats = info?.data?.stats || info?.data?.userInfo?.stats || info?.data?.user_info?.stats || info?.stats || {};
 
-  const postsRes = await fetch(
-    `https://${RAPID_HOST}/user/posts?unique_id=${encodeURIComponent(username)}&count=${count}&cursor=0`,
-    { headers, signal: AbortSignal.timeout(20000) },
-  );
-  if (!postsRes.ok) throw new Error(`posts-${postsRes.status}`);
-  const postsData = await postsRes.json();
-  const videos: any[] = Array.isArray(postsData?.data)
-    ? postsData.data
-    : postsData?.data?.videos || postsData?.data?.aweme_list || postsData?.videos || postsData?.aweme_list || [];
-  const valid = videos
-    .map((v) => ({
-      ...v,
-      aweme_id: v?.video_id || v?.aweme_id || v?.id,
-      resolvedPlay: firstUrl(v?.play) || firstUrl(v?.wmplay) || firstUrl(v?.video?.play_addr?.url_list) || firstUrl(v?.video?.download_addr?.url_list),
-    }))
-    .filter((v) => v?.aweme_id && v?.resolvedPlay);
-  if (!valid.length) throw new Error("no-videos");
+  const posts = await fetchRapidPosts(username, count, headers, 20000);
+  if (!posts.length) throw new Error("no-videos");
 
   const profile = {
     username: resolvedUsername,
@@ -187,67 +229,41 @@ const scrapeViaRapid = async (username: string, count: number) => {
     avatar: playableVideoUrl(user.avatarLarger || user.avatarMedium || user.avatarThumb || ""),
     hasStory: Number(user.UserStoryStatus ?? 0) > 0,
   };
-  const posts = valid.map((v) => ({
-    id: String(v.aweme_id),
-    title: v.title || "",
-    description: v.title || "",
-    thumbnail: playableVideoUrl(firstUrl(v.cover) || firstUrl(v.origin_cover) || firstUrl(v?.video?.cover?.url_list)),
-    videoUrl: playableVideoUrl(v.resolvedPlay),
-    duration: formatDuration(v.duration ?? v?.video?.duration ?? 0),
-    createdAt: getPostedDate(v.aweme_id, v.create_time),
-    music: v.music_info?.title || v.music?.title || "original sound",
-    musicCover: playableVideoUrl(firstUrl(v.music_info?.cover) || firstUrl(v?.music?.cover_large?.url_list) || firstUrl(v?.music?.cover_medium?.url_list)),
-    tags: extractTags(v.title || ""),
-    stats: {
-      views: v.play_count || 0,
-      likes: v.digg_count || 0,
-      comments: v.comment_count || 0,
-      shares: v.share_count || 0,
-      saves: v.collect_count || 0,
-      downloads: v.download_count || 0,
-    },
-  }));
   return { profile, posts, error: null as string | null };
 };
 
-// Zyla's feed has no sound metadata, so best-effort attach each video's real
-// sound title and artwork from RapidAPI by video ID. Failures keep Zyla data.
-const enrichMusicViaRapid = async <T extends { posts: any[] }>(username: string, count: number, res: T): Promise<T> => {
+// Zyla's feed lacks sound metadata, can return a short list, and its covers
+// sometimes fail to load. Best-effort: take RapidAPI covers/sound per video ID
+// and append videos Zyla missed, up to `count`. Failures keep Zyla data.
+const enrichViaRapid = async <T extends { posts: any[] }>(username: string, count: number, res: T): Promise<T> => {
   const key = process.env.RAPIDAPI_KEY?.split(/[\n,]/).map((item) => item.trim()).find(Boolean);
-  if (!key || !res.posts.length) return res;
+  if (!key) return res;
   try {
-    const r = await fetch(
-      `https://${RAPID_HOST}/user/posts?unique_id=${encodeURIComponent(username)}&count=${count}&cursor=0`,
-      { headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": RAPID_HOST }, signal: AbortSignal.timeout(12000) },
-    );
-    if (!r.ok) return res;
-    const d = await r.json();
-    const videos: any[] = Array.isArray(d?.data) ? d.data : d?.data?.videos || d?.data?.aweme_list || d?.videos || [];
-    const byId = new Map<string, { title: string; cover: string }>();
-    for (const v of videos) {
-      const id = String(v?.video_id || v?.aweme_id || v?.id || "");
-      const m = v?.music_info || v?.music || {};
-      const cover = firstUrl(m.cover) || firstUrl(m?.cover_large?.url_list) || firstUrl(m?.cover_medium?.url_list) || firstUrl(m.cover_thumb);
-      if (id) byId.set(id, { title: m.title || "", cover });
+    const rapid = await fetchRapidPosts(username, count, { "X-RapidAPI-Key": key, "X-RapidAPI-Host": RAPID_HOST }, 12000);
+    const byId = new Map(rapid.map((p) => [p.id, p]));
+    const merged = res.posts.map((p) => {
+      const r = byId.get(String(p.id));
+      if (!r) return p;
+      return {
+        ...p,
+        thumbnail: r.thumbnail || p.thumbnail,
+        music: r.music || p.music,
+        musicCover: r.musicCover || p.musicCover,
+      };
+    });
+    const have = new Set(merged.map((p) => String(p.id)));
+    for (const r of rapid) {
+      if (merged.length >= count) break;
+      if (!have.has(r.id)) { merged.push(r); have.add(r.id); }
     }
-    return {
-      ...res,
-      posts: res.posts.map((p) => {
-        const m = byId.get(String(p.id));
-        if (!m) return p;
-        return {
-          ...p,
-          music: m.title || p.music,
-          musicCover: m.cover ? playableVideoUrl(m.cover) : p.musicCover,
-        };
-      }),
-    };
+    merged.sort((x, y) => { try { return BigInt(y.id) > BigInt(x.id) ? 1 : -1; } catch { return 0; } });
+    return { ...res, posts: merged };
   } catch {
     return res;
   }
 };
 
-// ---------- Apify fallback — ultra-fast dataset polling ----------
+// ---------- Apify fallback — async run + poll (slow but reliable) ----------
 const scrapeViaApify = async (username: string, count: number) => {
   const key = process.env.APIFY_API_KEY;
   if (!key) throw new Error("Scraping fallback key is not configured");
@@ -256,13 +272,13 @@ const scrapeViaApify = async (username: string, count: number) => {
     "Content-Type": "application/json",
   };
 
-  // Start an async Actor run without downloading heavy media bytes so it finishes in 5-8s
+  // Start an async Actor run — sync mode times out (502) when downloading many videos.
   const startRes = await fetch(`${APIFY_URL}/acts/${ACTOR_ID}/runs`, {
     method: "POST",
     headers,
     body: JSON.stringify({
       profiles: [username],
-      resultsPerPage: Math.min(count, 12),
+      resultsPerPage: count,
       shouldDownloadVideos: true,
       shouldDownloadCovers: true,
     }),
@@ -283,29 +299,29 @@ const scrapeViaApify = async (username: string, count: number) => {
     return { error: "Scraper could not be started. Please retry.", profile: emptyProfile(username), posts: [] };
   }
 
-  // Poll dataset directly at 1.5s intervals (completes in 5-8s, well within Vercel's limit)
-  let items: any[] = [];
-  for (let i = 0; i < 6; i++) {
-    await sleep(1500);
-    try {
-      const itemsRes = await fetch(`${APIFY_URL}/datasets/${datasetId}/items`, { headers });
-      if (itemsRes.ok) {
-        const data = await itemsRes.json();
-        if (Array.isArray(data) && data.length > 0) {
-          items = data;
-          break;
-        }
-      }
-    } catch {
-      // keep polling
+  // Poll run status until terminal (slow interval; stop on 4xx or failure).
+  let status = runData.status as string;
+  for (let i = 0; i < 28 && !["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status); i++) {
+    await sleep(3000);
+    const stRes = await fetch(`${APIFY_URL}/actor-runs/${runId}`, { headers });
+    if (!stRes.ok) {
+      if (stRes.status >= 400 && stRes.status < 500) break; // won't recover
+      continue; // transient 5xx — keep polling
     }
+    status = (await stRes.json())?.data?.status || status;
+  }
+  if (["FAILED", "ABORTED", "TIMED-OUT"].includes(status)) {
+    return { error: "Scraping failed. Please retry.", profile: emptyProfile(username), posts: [] };
   }
 
-  // Check if error item was returned (e.g., user not found)
-  if (items.length > 0 && items[0]?.error) {
-    return { error: "User not found. Double-check the username.", profile: emptyProfile(username), posts: [] };
+  // Read whatever the dataset has (full set if SUCCEEDED, partial if still running).
+  const itemsRes = await fetch(`${APIFY_URL}/datasets/${datasetId}/items?limit=${count}`, { headers });
+  if (!itemsRes.ok) {
+    const t = await itemsRes.text();
+    console.error(`Apify dataset read failed [${itemsRes.status}]`);
+    return { error: "TikTok is temporarily unavailable. Please retry.", profile: emptyProfile(username), posts: [] };
   }
-
+  const items: any[] = await itemsRes.json();
   const valid = items.filter((i) => i?.authorMeta && i?.id);
   if (!valid.length) {
     return { error: "User not found. Double-check the username.", profile: emptyProfile(username), posts: [] };
@@ -318,7 +334,7 @@ const scrapeViaApify = async (username: string, count: number) => {
     followers: a.fans ?? 0,
     following: a.following ?? 0,
     verified: !!a.verified,
-    bioLink: (typeof a.bioLink === "string" ? a.bioLink : (a.bioLink && typeof (a.bioLink as any).link === "string" ? (a.bioLink as any).link : "")) || "",
+    bioLink: a.bioLink || "",
     region: a.region || "",
     avatar: playableVideoUrl(a.avatar || ""),
     hasStory: Number(a.UserStoryStatus ?? a.userStoryStatus ?? 0) > 0,
@@ -327,7 +343,6 @@ const scrapeViaApify = async (username: string, count: number) => {
     const d = p.videoMeta?.duration ?? 0;
     const directVideoUrl =
       p.mediaUrls?.[0] ||
-      p.videoMeta?.subtitleLinks?.[0]?.downloadLink ||
       p.videoMeta?.downloadAddr ||
       p.videoMeta?.playAddr ||
       p.videoUrl ||
@@ -366,22 +381,12 @@ export const scrapeTikTok = createServerFn({ method: "POST" })
       return { error: "Enter a valid TikTok username.", profile: emptyProfile(""), posts: [] };
     }
 
-    // When Zyla is expired or unavailable, try Apify directly
-    if (process.env.APIFY_API_KEY) {
-      try {
-        const res = await scrapeViaApify(username, data.count);
-        return res;
-      } catch (e: any) {
-        console.error("Apify direct scrape error:", e);
-      }
-    }
-
-    // Primary: Zyla Labs
+    // Primary: Zyla Labs — seconds instead of minutes, direct playable URLs.
     let primaryFailure = "";
     let zylaFailure = "";
     try {
       const res = await scrapeViaZyla(username, data.count);
-      return await enrichMusicViaRapid(username, data.count, res);
+      return await enrichViaRapid(username, data.count, res);
     } catch (e: any) {
       zylaFailure = String(e?.message || e);
       primaryFailure = zylaFailure;
