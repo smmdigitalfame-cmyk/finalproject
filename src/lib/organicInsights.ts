@@ -27,6 +27,20 @@ function hash(text: string): number {
 /** Deterministic fraction in [0, 1] for a video and purpose. */
 export const organicFraction = (id: string, key: string) => hash(`${id}:organic:${key}`) / 4294967295;
 
+/** Independently seeded viewer splits, stored on the reel like other insights. */
+export function reelViewerTypes(id: string, saved: Pick<ReelInsights, "newViewerPct" | "nonFollowersPct"> = {}) {
+  const inRange = (value: number | undefined, min: number, max: number) =>
+    typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+  return {
+    newViewerPct: inRange(saved.newViewerPct, 10, 30)
+      ? saved.newViewerPct as number
+      : Number((10 + organicFraction(id, "new-viewers") * 20).toFixed(1)),
+    nonFollowersPct: inRange(saved.nonFollowersPct, 75, 99)
+      ? saved.nonFollowersPct as number
+      : Number((75 + organicFraction(id, "non-followers") * 24).toFixed(1)),
+  };
+}
+
 export const organicTotalPlayTime = (id: string) =>
   Math.round(TOTAL_PLAY_MIN + organicFraction(id, "total-play") * (TOTAL_PLAY_MAX - TOTAL_PLAY_MIN));
 

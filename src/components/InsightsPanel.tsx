@@ -6,6 +6,7 @@ import { ShareIcon } from "@/components/ShareIcon";
 import { parseInputNumber, parseDuration, formatDuration } from "@/lib/utils";
 import { orderedAudienceRegions } from "@/lib/bulkInsights";
 import { formatCountryPercentage } from "@/lib/audienceEstimates";
+import { reelViewerTypes } from "@/lib/organicInsights";
 import { Button } from "@/components/ui/button";
 
 const formatDurationDisplay = (raw: string): string => {
@@ -1500,10 +1501,9 @@ const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; i
   const reelEditScope = useContext(ReelEditScopeContext);
   const totalViewers = ins.views;
 
-  const newViewerPct2 = ins.newViewerPct ?? 11;
-  const nonFollowersPct = ins.nonFollowersPct ?? 86;
-  const returningPct2 = 100 - newViewerPct2;
-  const followersPct = 100 - nonFollowersPct;
+  const { newViewerPct: newViewerPct2, nonFollowersPct } = reelViewerTypes(reelEditScope, ins);
+  const returningPct2 = Number((100 - newViewerPct2).toFixed(1));
+  const followersPct = Number((100 - nonFollowersPct).toFixed(1));
 
   const SplitBar = ({ leftLabel, leftPct, rightLabel, rightPct, onLeftUpdate, onRightUpdate }: { leftLabel: string; leftPct: number; rightLabel: string; rightPct: number; onLeftUpdate: (v: number) => void; onRightUpdate: (v: number) => void }) => (
     <div>

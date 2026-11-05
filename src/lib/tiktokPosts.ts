@@ -1,6 +1,6 @@
 import type { ReelData } from "./mockData";
 import { scrapeTikTok } from "./tiktok.functions";
-import { organicAgeGroups, organicAudienceRegions, organicAvgWatchTime, organicTotalPlayTime, organicViewsByDay, organicWatchedFull } from "./organicInsights";
+import { organicAgeGroups, organicAudienceRegions, organicAvgWatchTime, organicTotalPlayTime, organicViewsByDay, organicWatchedFull, reelViewerTypes } from "./organicInsights";
 
 export interface TikTokApiPost {
   id: string;
@@ -47,6 +47,7 @@ export const apiPostToReel = (p: TikTokApiPost, username: string): ReelData => {
     username: `@${username.replace(/^@/, "")}`,
     insights: {
       views,
+      ...reelViewerTypes(p.id),
       likes,
       comments,
       shares,

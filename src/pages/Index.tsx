@@ -7,7 +7,7 @@ import BottomNav from "@/components/BottomNav";
 import { applyBulkInsights, applyBulkInsightsBatched, persistBulkResult, loadBulkSettings, type BulkInsightSettings } from "@/lib/bulkInsights";
 import { toast } from "sonner";
 import { refreshLegacyAudienceRegions } from "@/lib/audienceEstimates";
-import { refreshLegacyAgeGroups, refreshLegacyViewsByDay } from "@/lib/organicInsights";
+import { refreshLegacyAgeGroups, refreshLegacyViewsByDay, reelViewerTypes } from "@/lib/organicInsights";
 
 
 // Code-split heavy overlays/panels — they only mount when needed
@@ -31,6 +31,7 @@ const cloneReel = (reel: ReelData): ReelData => ({
   tags: [...reel.tags],
   insights: {
     ...reel.insights,
+    ...reelViewerTypes(reel.id, reel.insights),
     trafficSources: { ...reel.insights.trafficSources },
     searchQueries: reel.insights.searchQueries?.map((item) => ({ ...item })),
     audienceRegions: reel.insights.audienceRegions.map((item) => ({ ...item })),
@@ -65,6 +66,22 @@ const Index = () => {
   });
 
   const [selectedReel, setSelectedReel] = useState<ReelData | null>(null);
+
+  // Backfill only the two viewer percentages on previously saved reels.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("user_reels");
+      if (!saved) return;
+      const stored: ReelData[] = JSON.parse(saved);
+      const updated = stored.map((reel) => ({
+        ...reel,
+        insights: { ...reel.insights, ...reelViewerTypes(reel.id, reel.insights) },
+      }));
+      if (JSON.stringify(updated) !== saved) persistReels(updated);
+    } catch {
+      // Leave existing saved data untouched if it cannot be read.
+    }
+  }, []);
   const [editingReel, setEditingReel] = useState<ReelData | null>(null);
   const [insightsReel, setInsightsReel] = useState<ReelData | null>(null);
   const [showBulkSettings, setShowBulkSettings] = useState(false);

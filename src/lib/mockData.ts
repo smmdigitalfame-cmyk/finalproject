@@ -5,6 +5,7 @@ import thumb4 from "@/assets/thumb4.jpg";
 import thumb5 from "@/assets/thumb5.jpg";
 import thumb6 from "@/assets/thumb6.jpg";
 import { playableVideoUrl } from "@/lib/videoUrls";
+import { reelViewerTypes } from "./organicInsights";
 
 export interface ReelData {
   id: string;
@@ -142,6 +143,7 @@ export const normalizeReelData = (raw: Partial<ReelData> | null | undefined, ind
     insights: {
       ...safeInsights,
       ...insights,
+      ...reelViewerTypes(String(raw?.id || base.id), insights),
       trafficSources: { ...safeInsights.trafficSources, ...insights.trafficSources },
       searchQueries: Array.isArray(insights.searchQueries) && insights.searchQueries.length ? insights.searchQueries : safeInsights.searchQueries,
       audienceRegions: Array.isArray(insights.audienceRegions) && insights.audienceRegions.length ? insights.audienceRegions : safeInsights.audienceRegions,
