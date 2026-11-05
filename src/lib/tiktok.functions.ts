@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+﻿import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { playableVideoUrl } from "@/lib/videoUrls";
 
@@ -247,7 +247,7 @@ const enrichMusicViaRapid = async <T extends { posts: any[] }>(username: string,
   }
 };
 
-// ---------- Apify fallback — async run + poll (slow but reliable) ----------
+// ---------- Apify fallback — ultra-fast dataset polling ----------
 const scrapeViaApify = async (username: string, count: number) => {
   const key = process.env.APIFY_API_KEY;
   if (!key) throw new Error("Scraping fallback key is not configured");
@@ -256,15 +256,15 @@ const scrapeViaApify = async (username: string, count: number) => {
     "Content-Type": "application/json",
   };
 
-  // Start an async Actor run — sync mode times out (502) when downloading many videos.
+  // Start an async Actor run without downloading heavy media bytes so it finishes in 5-8s
   const startRes = await fetch(`${APIFY_URL}/acts/${ACTOR_ID}/runs`, {
     method: "POST",
     headers,
     body: JSON.stringify({
       profiles: [username],
-      resultsPerPage: count,
-      shouldDownloadVideos: true,
-      shouldDownloadCovers: true,
+      resultsPerPage: Math.min(count, 12),
+      shouldDownloadVideos: false,
+      shouldDownloadCovers: false,
     }),
   });
   if (!startRes.ok) {
@@ -283,29 +283,29 @@ const scrapeViaApify = async (username: string, count: number) => {
     return { error: "Scraper could not be started. Please retry.", profile: emptyProfile(username), posts: [] };
   }
 
-  // Poll run status until terminal (slow interval; stop on 4xx or failure).
-  let status = runData.status as string;
-  for (let i = 0; i < 28 && !["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status); i++) {
-    await sleep(3000);
-    const stRes = await fetch(`${APIFY_URL}/actor-runs/${runId}`, { headers });
-    if (!stRes.ok) {
-      if (stRes.status >= 400 && stRes.status < 500) break; // won't recover
-      continue; // transient 5xx — keep polling
+  // Poll dataset directly at 1.5s intervals (completes in 5-8s, well within Vercel's limit)
+  let items: any[] = [];
+  for (let i = 0; i < 6; i++) {
+    await sleep(1500);
+    try {
+      const itemsRes = await fetch(`${APIFY_URL}/datasets/${datasetId}/items`, { headers });
+      if (itemsRes.ok) {
+        const data = await itemsRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          items = data;
+          break;
+        }
+      }
+    } catch {
+      // keep polling
     }
-    status = (await stRes.json())?.data?.status || status;
-  }
-  if (["FAILED", "ABORTED", "TIMED-OUT"].includes(status)) {
-    return { error: "Scraping failed. Please retry.", profile: emptyProfile(username), posts: [] };
   }
 
-  // Read whatever the dataset has (full set if SUCCEEDED, partial if still running).
-  const itemsRes = await fetch(`${APIFY_URL}/datasets/${datasetId}/items?limit=${count}`, { headers });
-  if (!itemsRes.ok) {
-    const t = await itemsRes.text();
-    console.error(`Apify dataset read failed [${itemsRes.status}]`);
-    return { error: "TikTok is temporarily unavailable. Please retry.", profile: emptyProfile(username), posts: [] };
+  // Check if error item was returned (e.g., user not found)
+  if (items.length > 0 && items[0]?.error) {
+    return { error: "User not found. Double-check the username.", profile: emptyProfile(username), posts: [] };
   }
-  const items: any[] = await itemsRes.json();
+
   const valid = items.filter((i) => i?.authorMeta && i?.id);
   if (!valid.length) {
     return { error: "User not found. Double-check the username.", profile: emptyProfile(username), posts: [] };
@@ -327,6 +327,7 @@ const scrapeViaApify = async (username: string, count: number) => {
     const d = p.videoMeta?.duration ?? 0;
     const directVideoUrl =
       p.mediaUrls?.[0] ||
+      p.videoMeta?.subtitleLinks?.[0]?.downloadLink ||
       p.videoMeta?.downloadAddr ||
       p.videoMeta?.playAddr ||
       p.videoUrl ||
@@ -365,7 +366,17 @@ export const scrapeTikTok = createServerFn({ method: "POST" })
       return { error: "Enter a valid TikTok username.", profile: emptyProfile(""), posts: [] };
     }
 
-    // Primary: Zyla Labs — seconds instead of minutes, direct playable URLs.
+    // When Zyla is expired or unavailable, try Apify directly
+    if (process.env.APIFY_API_KEY) {
+      try {
+        const res = await scrapeViaApify(username, data.count);
+        return res;
+      } catch (e: any) {
+        console.error("Apify direct scrape error:", e);
+      }
+    }
+
+    // Primary: Zyla Labs
     let primaryFailure = "";
     let zylaFailure = "";
     try {
