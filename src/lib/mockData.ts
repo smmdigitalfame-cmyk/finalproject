@@ -27,6 +27,10 @@ export interface ReelInsights {
   views: number;
   newViewerPct?: number;
   nonFollowersPct?: number;
+  /** True once the user manually edits viewer-type percentages; saved values outside default ranges are kept. */
+  viewerTypesEdited?: boolean;
+  /** User-edited texts in the Viewers tab, keyed by field id. */
+  viewerTexts?: Record<string, string>;
   retentionWatchedPct?: number;
   retentionStopSec?: number;
   retentionCurve?: number[];

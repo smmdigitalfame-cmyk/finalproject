@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, it } from "vitest";
 import { organicAgeGroups, organicAudienceRegions, organicViewsByDay, refreshLegacyAgeGroups, refreshLegacyViewsByDay } from "./organicInsights";
 
 const ids = Array.from({ length: 200 }, (_, i) => `7${i}123456789${i}`);
@@ -47,5 +47,15 @@ describe("organic per-video estimates", () => {
     expect(refreshLegacyAgeGroups("a", legacyAge)).toEqual(organicAgeGroups("a"));
     const editedAge = legacyAge.map((g, i) => i === 0 ? { ...g, percentage: 20 } : g);
     expect(refreshLegacyAgeGroups("a", editedAge)).toBe(editedAge);
+  });
+});
+
+import { reelViewerTypes as rvt } from "./organicInsights";
+describe("edited viewer types", () => {
+  it("keeps a user-edited new viewer value outside the default range", () => {
+    expect(rvt("abc", { newViewerPct: 45, nonFollowersPct: 60, viewerTypesEdited: true })).toEqual({ newViewerPct: 45, nonFollowersPct: 60 });
+  });
+  it("still replaces out-of-range unedited values", () => {
+    expect(rvt("abc", { newViewerPct: 45 }).newViewerPct).toBeLessThanOrEqual(30);
   });
 });

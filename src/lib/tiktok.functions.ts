@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { playableVideoUrl } from "@/lib/videoUrls";
+import { scrapeInputSchema } from "@/lib/cloneLimits";
 
 const APIFY_URL = "https://api.apify.com/v2";
 const ACTOR_ID = "clockworks~tiktok-scraper";
@@ -81,8 +81,8 @@ const scrapeViaZyla = async (username: string, count: number) => {
   const headers = { Authorization: `Bearer ${key}` };
 
   const [infoRes, postsRes] = await Promise.all([
-    fetch(`${ZYLA_BASE}/18616/user+details?username=${encodeURIComponent(username)}`, { headers, signal: AbortSignal.timeout(20000) }),
-    fetch(`${ZYLA_BASE}/18615/user+videos?username=${encodeURIComponent(username)}`, { headers, signal: AbortSignal.timeout(25000) }),
+    fetch(`${ZYLA_BASE}/18616/user+details?username=${encodeURIComponent(username)}`, { headers, signal: AbortSignal.timeout(10000) }),
+    fetch(`${ZYLA_BASE}/18615/user+videos?username=${encodeURIComponent(username)}`, { headers, signal: AbortSignal.timeout(12000) }),
   ]);
   if (!infoRes.ok) throw new Error(`info-${infoRes.status}`);
   const user = await infoRes.json();
@@ -137,7 +137,8 @@ const scrapeViaZyla = async (username: string, count: number) => {
       downloads: 0,
     },
   }));
-  return { profile, posts, error: null as string | null };
+  const totalVideos = Number(user.total_videos ?? user.video_count ?? NaN);
+  return { profile, posts, error: null as string | null, totalVideos: Number.isFinite(totalVideos) ? totalVideos : undefined };
 };
 
 // ---------- RapidAPI (tiktok-scraper7) — fallback: fast, direct video URLs ----------
@@ -178,7 +179,7 @@ const fetchRapidPosts = async (username: string, count: number, headers: Record<
   const out: ReturnType<typeof mapRapidVideos> = [];
   const seen = new Set<string>();
   let cursor = "0";
-  for (let page = 0; page < 4 && out.length < count; page++) {
+  for (let page = 0; page < 5 && out.length < count; page++) {
     const r = await fetch(
       `https://${RAPID_HOST}/user/posts?unique_id=${encodeURIComponent(username)}&count=${count}&cursor=${cursor}`,
       { headers, signal: AbortSignal.timeout(timeoutMs) },
@@ -205,7 +206,7 @@ const scrapeViaRapid = async (username: string, count: number) => {
 
   const infoRes = await fetch(
     `https://${RAPID_HOST}/user/info?unique_id=${encodeURIComponent(username)}`,
-    { headers, signal: AbortSignal.timeout(15000) },
+    { headers, signal: AbortSignal.timeout(8000) },
   );
   if (!infoRes.ok) throw new Error(`info-${infoRes.status}`);
   const info = await infoRes.json();
@@ -214,7 +215,7 @@ const scrapeViaRapid = async (username: string, count: number) => {
   if (!user || !resolvedUsername) throw new Error("user-not-found");
   const stats = info?.data?.stats || info?.data?.userInfo?.stats || info?.data?.user_info?.stats || info?.stats || {};
 
-  const posts = await fetchRapidPosts(username, count, headers, 20000);
+  const posts = await fetchRapidPosts(username, count, headers, 10000);
   if (!posts.length) throw new Error("no-videos");
 
   const profile = {
@@ -239,7 +240,7 @@ const enrichViaRapid = async <T extends { posts: any[] }>(username: string, coun
   const key = process.env.RAPIDAPI_KEY?.split(/[\n,]/).map((item) => item.trim()).find(Boolean);
   if (!key) return res;
   try {
-    const rapid = await fetchRapidPosts(username, count, { "X-RapidAPI-Key": key, "X-RapidAPI-Host": RAPID_HOST }, 12000);
+    const rapid = await fetchRapidPosts(username, count, { "X-RapidAPI-Key": key, "X-RapidAPI-Host": RAPID_HOST }, 7000);
     const byId = new Map(rapid.map((p) => [p.id, p]));
     const merged = res.posts.map((p) => {
       const r = byId.get(String(p.id));
@@ -301,10 +302,11 @@ const scrapeViaApify = async (username: string, count: number) => {
 
   // Poll run status until terminal (slow interval; stop on 4xx or failure).
   let status = runData.status as string;
-  for (let i = 0; i < 28 && !["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status); i++) {
+  for (let i = 0; i < 25 && !["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"].includes(status); i++) {
     await sleep(3000);
-    const stRes = await fetch(`${APIFY_URL}/actor-runs/${runId}`, { headers });
-    if (!stRes.ok) {
+    const stRes = await fetch(`${APIFY_URL}/actor-runs/${runId}`, { headers, signal: AbortSignal.timeout(8000) }).catch(() => null as any);
+    if (!stRes?.ok) {
+      if (!stRes) continue;
       if (stRes.status >= 400 && stRes.status < 500) break; // won't recover
       continue; // transient 5xx — keep polling
     }
@@ -371,10 +373,28 @@ const scrapeViaApify = async (username: string, count: number) => {
   return { profile, posts, error: null };
 };
 
+// Best-effort: append videos the fast sources missed (newest first, up to `count`).
+// Any Apify failure keeps the videos already found.
+const topUpViaApify = async <T extends { posts: any[] }>(username: string, count: number, res: T): Promise<T> => {
+  try {
+    const extra = await scrapeViaApify(username, count);
+    if (extra.error || !extra.posts.length) return res;
+    const have = new Set(res.posts.map((p) => String(p.id)));
+    const merged = [...res.posts];
+    for (const p of extra.posts) {
+      if (merged.length >= count) break;
+      if (p.videoUrl && !have.has(String(p.id))) { merged.push(p); have.add(String(p.id)); }
+    }
+    merged.sort((x, y) => { try { return BigInt(y.id) > BigInt(x.id) ? 1 : -1; } catch { return 0; } });
+    return { ...res, posts: merged.slice(0, count) };
+  } catch (e: any) {
+    console.error(`Apify top-up failed: ${String(e?.message || e)}`);
+    return res;
+  }
+};
+
 export const scrapeTikTok = createServerFn({ method: "POST" })
-  .inputValidator((d) =>
-    z.object({ username: z.string().min(1).max(60), count: z.number().int().min(1).max(35).default(30) }).parse(d),
-  )
+  .inputValidator((d) => scrapeInputSchema.parse(d))
   .handler(async ({ data }) => {
     const username = cleanUsername(data.username);
     if (!username) {
@@ -385,8 +405,11 @@ export const scrapeTikTok = createServerFn({ method: "POST" })
     let primaryFailure = "";
     let zylaFailure = "";
     try {
-      const res = await scrapeViaZyla(username, data.count);
-      return await enrichViaRapid(username, data.count, res);
+      const { totalVideos, ...zyla } = await scrapeViaZyla(username, data.count);
+      const res = await enrichViaRapid(username, data.count, zyla);
+      // Zyla's feed stops at ~30 videos; top up from Apify when the account has more.
+      const wantMore = res.posts.length < data.count && (totalVideos === undefined || totalVideos > res.posts.length);
+      return wantMore ? await topUpViaApify(username, data.count, res) : res;
     } catch (e: any) {
       zylaFailure = String(e?.message || e);
       primaryFailure = zylaFailure;

@@ -1505,19 +1505,27 @@ const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; i
   const returningPct2 = Number((100 - newViewerPct2).toFixed(1));
   const followersPct = Number((100 - nonFollowersPct).toFixed(1));
 
-  const SplitBar = ({ leftLabel, leftPct, rightLabel, rightPct, onLeftUpdate, onRightUpdate }: { leftLabel: string; leftPct: number; rightLabel: string; rightPct: number; onLeftUpdate: (v: number) => void; onRightUpdate: (v: number) => void }) => (
+  const texts = ins.viewerTexts ?? {};
+  const txt = (key: string, fallback: string) => texts[key] ?? fallback;
+  const setTxt = (key: string) => (v: string) => onUpdate({ viewerTexts: { ...(ins.viewerTexts ?? {}), [key]: v } });
+  const parsePct = (v: string) => {
+    const n = parseFloat(v.replace(/[^0-9.]/g, ''));
+    return isNaN(n) ? null : Math.max(0, Math.min(100, Number(n.toFixed(1))));
+  };
+
+  const renderSplit = (keyPrefix: string, leftLabel: string, leftPct: number, rightLabel: string, rightPct: number, field: "newViewerPct" | "nonFollowersPct") => (
     <div>
       <div className="flex justify-between text-[13px] font-black text-foreground mb-1.5">
         <span>
           <EditableVal val={`${leftPct}%`} isEditing={isEditing} onUpdate={(v) => {
-            const n = parseFloat(v.replace(/[^0-9.]/g, ''));
-            if (!isNaN(n)) onLeftUpdate(Math.max(0, Math.min(100, n)));
+            const n = parsePct(v);
+            if (n !== null) onUpdate({ [field]: n, viewerTypesEdited: true });
           }} />
         </span>
         <span>
           <EditableVal val={`${rightPct}%`} isEditing={isEditing} onUpdate={(v) => {
-            const n = parseFloat(v.replace(/[^0-9.]/g, ''));
-            if (!isNaN(n)) onRightUpdate(Math.max(0, Math.min(100, n)));
+            const n = parsePct(v);
+            if (n !== null) onUpdate({ [field]: Number((100 - n).toFixed(1)), viewerTypesEdited: true });
           }} />
         </span>
       </div>
@@ -1526,8 +1534,8 @@ const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; i
       </div>
 
       <div className="flex justify-between text-[12.5px] font-bold text-muted-foreground mt-1.5">
-        <span><EditableVal val={leftLabel} isEditing={isEditing} /></span>
-        <span><EditableVal val={rightLabel} isEditing={isEditing} /></span>
+        <span><EditableVal val={txt(`${keyPrefix}Left`, leftLabel)} isEditing={isEditing} onUpdate={setTxt(`${keyPrefix}Left`)} /></span>
+        <span><EditableVal val={txt(`${keyPrefix}Right`, rightLabel)} isEditing={isEditing} onUpdate={setTxt(`${keyPrefix}Right`)} /></span>
       </div>
     </div>
   );
@@ -1536,11 +1544,14 @@ const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; i
     <div>
       <Card className="!py-3">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-foreground text-[15px] font-black"><EditableVal val="Total viewers" isEditing={isEditing} /></h3>
+          <h3 className="text-foreground text-[15px] font-black"><EditableVal val={txt("totalTitle", "Total viewers")} isEditing={isEditing} onUpdate={setTxt("totalTitle")} /></h3>
           <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
         </div>
         <p className="text-foreground text-[24px] font-black leading-tight mt-0.5">
-          <EditableVal val={formatNumber(totalViewers)} isEditing={isEditing} />
+          <EditableVal val={formatNumber(totalViewers)} isEditing={isEditing} onUpdate={(v) => {
+            const n = parseInputNumber(v);
+            if (n > 0) onUpdate({ views: n });
+          }} />
         </p>
       </Card>
 
@@ -1548,22 +1559,12 @@ const ViewersTab = ({ ins, isEditing, onUpdate }: { ins: ReelData["insights"]; i
       {/* Viewer types */}
       <Card className="mt-2.5">
         <div className="flex items-center gap-1.5 mb-5">
-          <h3 className="text-foreground text-[17px] font-black"><EditableVal val="Viewer types" isEditing={isEditing} /></h3>
+          <h3 className="text-foreground text-[17px] font-black"><EditableVal val={txt("typesTitle", "Viewer types")} isEditing={isEditing} onUpdate={setTxt("typesTitle")} /></h3>
           <Info className="w-3.5 h-3.5 text-muted-foreground/60" />
         </div>
         <div className="space-y-5">
-          <SplitBar
-            leftLabel="New viewers" leftPct={newViewerPct2}
-            rightLabel="Returning viewers" rightPct={returningPct2}
-            onLeftUpdate={(n) => onUpdate({ newViewerPct: n })}
-            onRightUpdate={(n) => onUpdate({ newViewerPct: 100 - n })}
-          />
-          <SplitBar
-            leftLabel="Non-followers" leftPct={nonFollowersPct}
-            rightLabel="Followers" rightPct={followersPct}
-            onLeftUpdate={(n) => onUpdate({ nonFollowersPct: n })}
-            onRightUpdate={(n) => onUpdate({ nonFollowersPct: 100 - n })}
-          />
+          {renderSplit("newViewers", "New viewers", newViewerPct2, "Returning viewers", returningPct2, "newViewerPct")}
+          {renderSplit("followers", "Non-followers", nonFollowersPct, "Followers", followersPct, "nonFollowersPct")}
         </div>
       </Card>
 

@@ -1,5 +1,6 @@
 import { scrapeTikTok } from "@/lib/tiktok.functions";
 import { apiPostToReel } from "@/lib/tiktokPosts";
+import { MAX_CLONE_VIDEOS } from "@/lib/cloneLimits";
 import { useState, useRef } from "react";
 import { z } from "zod";
 import { ReelData, formatNumber, generateRandomReel } from "@/lib/mockData";
@@ -103,7 +104,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
       let scraped: Awaited<ReturnType<typeof scrapeTikTok>> | undefined;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          scraped = await scrapeTikTok({ data: { username: uname, count: 30 } });
+          scraped = await scrapeTikTok({ data: { username: uname, count: MAX_CLONE_VIDEOS } });
           break;
         } catch (netErr) {
           // Flaky Wi-Fi / mobile data: retry the request before showing an error

@@ -1,6 +1,7 @@
 import type { ReelData } from "./mockData";
 import { scrapeTikTok } from "./tiktok.functions";
 import { organicAgeGroups, organicAudienceRegions, organicAvgWatchTime, organicTotalPlayTime, organicViewsByDay, organicWatchedFull, reelViewerTypes } from "./organicInsights";
+import { MAX_CLONE_VIDEOS } from "./cloneLimits";
 
 export interface TikTokApiPost {
   id: string;
@@ -69,7 +70,7 @@ export const apiPostToReel = (p: TikTokApiPost, username: string): ReelData => {
 
 export const fetchTikTokPosts = async (
   username: string,
-  count = 30
+  count = MAX_CLONE_VIDEOS
 ): Promise<ReelData[]> => {
   const result = await scrapeTikTok({ data: { username, count } });
   if (result.error) throw new Error(result.error);

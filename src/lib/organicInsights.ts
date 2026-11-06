@@ -28,9 +28,10 @@ function hash(text: string): number {
 export const organicFraction = (id: string, key: string) => hash(`${id}:organic:${key}`) / 4294967295;
 
 /** Independently seeded viewer splits, stored on the reel like other insights. */
-export function reelViewerTypes(id: string, saved: Pick<ReelInsights, "newViewerPct" | "nonFollowersPct"> = {}) {
+export function reelViewerTypes(id: string, saved: Pick<ReelInsights, "newViewerPct" | "nonFollowersPct" | "viewerTypesEdited"> = {}) {
+  const edited = saved.viewerTypesEdited === true;
   const inRange = (value: number | undefined, min: number, max: number) =>
-    typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+    typeof value === "number" && Number.isFinite(value) && (edited ? value >= 0 && value <= 100 : value >= min && value <= max);
   return {
     newViewerPct: inRange(saved.newViewerPct, 10, 30)
       ? saved.newViewerPct as number
