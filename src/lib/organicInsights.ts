@@ -75,8 +75,10 @@ export function organicViewsByDay(id: string, views: number): ReelInsights["view
   const weights = DAYS.map((_, i) => {
     const distance = i < peak ? (peak - i) * 1.6 : i - peak;
     const curve = Math.exp(-((distance / spread) ** 2));
-    const noise = 0.65 + organicFraction(id, `graph-noise-${i}`) * 0.7;
-    const bump = organicFraction(id, `graph-bump-${i}`) > 0.78 ? 1.35 : 1;
+    const noise = 0.4 + organicFraction(id, `graph-noise-${i}`) * 1.1;
+    const roll = organicFraction(id, `graph-bump-${i}`);
+    // Organic spikes and quiet dips so every video gets its own shape.
+    const bump = i === peak ? 1 : roll > 0.8 ? 1.6 + roll : roll < 0.22 ? 0.05 : 1;
     return (floor + curve) * noise * bump;
   });
   const parts = splitUnits(weights, Math.max(0, Math.floor(views)));
