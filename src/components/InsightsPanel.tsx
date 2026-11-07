@@ -6,7 +6,7 @@ import { ShareIcon } from "@/components/ShareIcon";
 import { parseInputNumber, parseDuration, formatDuration } from "@/lib/utils";
 import { orderedAudienceRegions } from "@/lib/bulkInsights";
 import { formatCountryPercentage } from "@/lib/audienceEstimates";
-import { reelViewerTypes } from "@/lib/organicInsights";
+import { reelViewerTypes, organicViewsByDay } from "@/lib/organicInsights";
 import { Button } from "@/components/ui/button";
 
 const formatDurationDisplay = (raw: string): string => {
@@ -496,22 +496,6 @@ const getVideoDurationSeconds = (duration: string) => {
   return parts[0] || 24;
 };
 
-const buildTikTokDecayGraph = (raw: number[], totalViews: number) => {
-  const length = Math.max(raw.length, 5);
-  const maxRaw = Math.max(...raw, 0);
-  const alreadyLooksReal = raw.length >= 4 && raw[0] >= raw[1] && raw[2] <= maxRaw * 0.08;
-  if (alreadyLooksReal) return raw;
-
-  const peak = Math.max(maxRaw, Math.round(totalViews * 0.82), 1);
-  const second = Math.max(Math.round(peak * 0.56), 1);
-  const drop = totalViews > 0 ? Math.max(40, Math.round(peak * 0.012)) : 0;
-  return Array.from({ length }, (_, i) => {
-    if (i === 0) return peak;
-    if (i === 1) return second;
-    if (i === 2) return drop;
-    return Math.max(0, Math.round(drop * (0.72 - (i - 3) * 0.08)));
-  });
-};
 
  const AnalyticsVideoFrame = ({ src, videoUrl, isEditing, showPlay = true, onProgress, seekRef }: { src: string; videoUrl?: string; isEditing: boolean; showPlay?: boolean; onProgress?: (t: number) => void; seekRef?: React.MutableRefObject<((t: number) => void) | null> }) => {
   const [playing, setPlaying] = useState(false);
@@ -610,7 +594,7 @@ const OverviewTab = ({ ins, reel, isEditing, onUpdate }: { ins: ReelData["insigh
 
   const hasManual = ins.viewsByDay.some(d => d.manual);
   const rawGraphData = ins.viewsByDay.map(d => d.views);
-  const graphData = hasManual ? rawGraphData : buildTikTokDecayGraph(rawGraphData, ins.views);
+  const graphData = hasManual ? rawGraphData : organicViewsByDay(reel.id, ins.views).map(d => d.views);
   const maxVal = Math.max(...graphData, 1);
 
   const metricCards: { key: MetricKey; label: string; value: string; rawKey: string }[] = [
