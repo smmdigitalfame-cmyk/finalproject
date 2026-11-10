@@ -8,6 +8,20 @@
       "when": 1792789650195,
       "tag": "0000_access_key_device_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794093701588,
+      "tag": "0001_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794094385760,
+      "tag": "0002_atomic_tiktok_order_key",
+      "breakpoints": true
     }
   ]
 }

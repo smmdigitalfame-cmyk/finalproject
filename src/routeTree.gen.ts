@@ -14,6 +14,8 @@ import { Route as KeyLoginRouteImport } from './routes/key-login'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminTelegramTestRouteImport } from './routes/admin/telegram-test'
 import { Route as ApiPublicApifyMediaRouteImport } from './routes/api/public/apify-media'
+import { Route as ApiPublicBotTiktokAdminRouteImport } from './routes/api/public/bot/tiktok-admin'
+import { Route as ApiPublicBotTiktokKeyRouteImport } from './routes/api/public/bot/tiktok-key'
 import { Route as ApiPublicTelegramWebhookRouteImport } from './routes/api/public/telegram/webhook'
 
 const IndexRoute = IndexRouteImport.update({
@@ -41,6 +43,16 @@ const ApiPublicApifyMediaRoute = ApiPublicApifyMediaRouteImport.update({
   path: '/api/public/apify-media',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBotTiktokAdminRoute = ApiPublicBotTiktokAdminRouteImport.update({
+  id: '/api/public/bot/tiktok-admin',
+  path: '/api/public/bot/tiktok-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicBotTiktokKeyRoute = ApiPublicBotTiktokKeyRouteImport.update({
+  id: '/api/public/bot/tiktok-key',
+  path: '/api/public/bot/tiktok-key',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicTelegramWebhookRoute =
   ApiPublicTelegramWebhookRouteImport.update({
     id: '/api/public/telegram/webhook',
@@ -54,6 +66,8 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/telegram-test': typeof AdminTelegramTestRoute
   '/api/public/apify-media': typeof ApiPublicApifyMediaRoute
+  '/api/public/bot/tiktok-admin': typeof ApiPublicBotTiktokAdminRoute
+  '/api/public/bot/tiktok-key': typeof ApiPublicBotTiktokKeyRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -62,6 +76,8 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/telegram-test': typeof AdminTelegramTestRoute
   '/api/public/apify-media': typeof ApiPublicApifyMediaRoute
+  '/api/public/bot/tiktok-admin': typeof ApiPublicBotTiktokAdminRoute
+  '/api/public/bot/tiktok-key': typeof ApiPublicBotTiktokKeyRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
 }
 export interface FileRoutesById {
@@ -71,6 +87,8 @@ export interface FileRoutesById {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/telegram-test': typeof AdminTelegramTestRoute
   '/api/public/apify-media': typeof ApiPublicApifyMediaRoute
+  '/api/public/bot/tiktok-admin': typeof ApiPublicBotTiktokAdminRoute
+  '/api/public/bot/tiktok-key': typeof ApiPublicBotTiktokKeyRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
 }
 export interface FileRouteTypes {
@@ -81,6 +99,8 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/telegram-test'
     | '/api/public/apify-media'
+    | '/api/public/bot/tiktok-admin'
+    | '/api/public/bot/tiktok-key'
     | '/api/public/telegram/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -89,6 +109,8 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/telegram-test'
     | '/api/public/apify-media'
+    | '/api/public/bot/tiktok-admin'
+    | '/api/public/bot/tiktok-key'
     | '/api/public/telegram/webhook'
   id:
     | '__root__'
@@ -97,6 +119,8 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/telegram-test'
     | '/api/public/apify-media'
+    | '/api/public/bot/tiktok-admin'
+    | '/api/public/bot/tiktok-key'
     | '/api/public/telegram/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -106,6 +130,8 @@ export interface RootRouteChildren {
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTelegramTestRoute: typeof AdminTelegramTestRoute
   ApiPublicApifyMediaRoute: typeof ApiPublicApifyMediaRoute
+  ApiPublicBotTiktokAdminRoute: typeof ApiPublicBotTiktokAdminRoute
+  ApiPublicBotTiktokKeyRoute: typeof ApiPublicBotTiktokKeyRoute
   ApiPublicTelegramWebhookRoute: typeof ApiPublicTelegramWebhookRoute
 }
 
@@ -146,6 +172,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicApifyMediaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/bot/tiktok-admin': {
+      id: '/api/public/bot/tiktok-admin'
+      path: '/api/public/bot/tiktok-admin'
+      fullPath: '/api/public/bot/tiktok-admin'
+      preLoaderRoute: typeof ApiPublicBotTiktokAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/bot/tiktok-key': {
+      id: '/api/public/bot/tiktok-key'
+      path: '/api/public/bot/tiktok-key'
+      fullPath: '/api/public/bot/tiktok-key'
+      preLoaderRoute: typeof ApiPublicBotTiktokKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/telegram/webhook': {
       id: '/api/public/telegram/webhook'
       path: '/api/public/telegram/webhook'
@@ -162,6 +202,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTelegramTestRoute: AdminTelegramTestRoute,
   ApiPublicApifyMediaRoute: ApiPublicApifyMediaRoute,
+  ApiPublicBotTiktokAdminRoute: ApiPublicBotTiktokAdminRoute,
+  ApiPublicBotTiktokKeyRoute: ApiPublicBotTiktokKeyRoute,
   ApiPublicTelegramWebhookRoute: ApiPublicTelegramWebhookRoute,
 }
 export const routeTree = rootRouteImport

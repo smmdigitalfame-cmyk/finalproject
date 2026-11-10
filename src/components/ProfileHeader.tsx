@@ -41,6 +41,7 @@ interface ProfileData {
   statusText: string;
   followers: string;
   following: string;
+  likes?: string;
   verified?: boolean;
   bioLink?: string;
   region?: string;
@@ -55,7 +56,7 @@ interface ProfileHeaderProps {
 }
 
 const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSettings }: ProfileHeaderProps) => {
-  const totalLikes = reels.reduce((sum, r) => sum + r.insights.likes, 0);
+  const computedLikes = reels.reduce((sum, r) => sum + r.insights.likes, 0);
   const [profile, setProfile] = useState<ProfileData>(() => {
     const defaults = {
       username: "extipsinghtpro.store",
@@ -195,6 +196,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
       ...editForm,
       following: parseInputNumber(editForm.following).toString(),
       followers: parseInputNumber(editForm.followers).toString(),
+      likes: editForm.likes && editForm.likes.trim() !== "" ? parseInputNumber(editForm.likes).toString() : undefined,
     };
     setProfile(updatedProfile);
     try {
@@ -320,7 +322,7 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
         <div className="w-[1px] h-3 bg-border/60" />
         <StatColumn value={formatNumber(parseInputNumber(profile.followers))} label="Followers" />
         <div className="w-[1px] h-3 bg-border/60" />
-        <StatColumn value={formatNumber(totalLikes)} label="Likes" />
+        <StatColumn value={formatNumber(profile.likes ? parseInputNumber(profile.likes) : computedLikes)} label="Likes" />
       </div>
 
       {/* Bio / Links / TikTok Studio */}
@@ -486,6 +488,15 @@ const ProfileHeader = ({ reels, activeTab, onTabChange, onSetReels, onOpenBulkSe
                   <input type="text" value={editForm.followers} onChange={(e) => setEditForm({ ...editForm, followers: e.target.value })}
                     className="w-full bg-secondary text-foreground rounded-lg px-3 py-2.5 text-sm border border-border focus:border-primary focus:outline-none" />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium mb-1 block">Likes</label>
+                <input type="text" value={editForm.likes ?? ""} onChange={(e) => setEditForm({ ...editForm, likes: e.target.value })}
+                  placeholder={formatNumber(computedLikes)}
+                  className="w-full bg-secondary text-foreground rounded-lg px-3 py-2.5 text-sm border border-border focus:border-primary focus:outline-none" />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Empty छोड़ने पर सभी videos के likes का total दिखेगा.
+                </p>
               </div>
 
               {/* Posts Section */}

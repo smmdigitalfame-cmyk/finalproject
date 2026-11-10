@@ -53,6 +53,38 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_orders: {
+        Row: {
+          created_at: string
+          key_id: string | null
+          order_id: string
+          plan_id: string
+          telegram_chat_id: string
+        }
+        Insert: {
+          created_at?: string
+          key_id?: string | null
+          order_id: string
+          plan_id: string
+          telegram_chat_id: string
+        }
+        Update: {
+          created_at?: string
+          key_id?: string | null
+          order_id?: string
+          plan_id?: string
+          telegram_chat_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_orders_key_id_fkey"
+            columns: ["key_id"]
+            isOneToOne: false
+            referencedRelation: "access_keys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       login_attempts: {
         Row: {
           created_at: string
@@ -85,6 +117,15 @@ export type Database = {
       check_access_key_device: {
         Args: { p_device: string; p_key: string; p_register?: boolean }
         Returns: boolean
+      }
+      mint_tiktok_order_key: {
+        Args: {
+          p_candidate_key: string
+          p_order_id: string
+          p_plan_id: string
+          p_telegram_chat_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {

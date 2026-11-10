@@ -1,6 +1,6 @@
 {
-  "name": "Reels Lab",
-  "short_name": "Reels Lab",
+  "name": "TikTok",
+  "short_name": "TikTok",
   "description": "Clone public short-video feeds, edit reel details, and explore watch-time, retention and audience insights.",
   "start_url": "/",
   "scope": "/",
